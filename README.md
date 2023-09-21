@@ -1,0 +1,9 @@
+# SG-Unlearn
+Needed packages: 
+  - numpy 
+  - scipy
+  - pytorch
+  - cvxpy
+  - cvxpylayers
+  - scikit-learn
+  - memory_profiler
