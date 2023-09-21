@@ -488,7 +488,7 @@ class DefenderOPT(nn.Module):
     def _attacker_likelihood_SVM(self, X_tr, y_tr, X_te, y_te, fold_id, class_id) -> torch.Tensor:
         """
             Formulate the membership inference attack (MIA)  
-            as a differentiable layer of Logistic Regression (LR)
+            as a differentiable layer of support vector machine (SVM)
         """
         if (fold_id, class_id) not in self.attacker_opt_cache:
             n_sample = X_tr.shape[0]
