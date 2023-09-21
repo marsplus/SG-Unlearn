@@ -5,6 +5,8 @@ cv=3
 d=11
 clas=SVM
 output_dir="../result/SG_data"
+mkdir -p $output_dir
+
 counter=0
 dev_id=0
 for seed in {1..10}

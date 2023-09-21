@@ -2,6 +2,8 @@
 
 alpha=1e-8
 output_dir="../../result/baselines"
+mkdir -p $output_dir
+
 counter=0
 for seed in {1..10}
 do
