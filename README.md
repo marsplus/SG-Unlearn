@@ -9,5 +9,5 @@
   - memory_profiler
  
 * Run the code
-  - first run `SG_run.sh`; this generates the unlearned model from SG and the corresponding forget, retain, test, validation sets.
-  - then run `baselines_run.sh` under `UnlearnSparse` folder.
+  - first run `src/SG_run.sh`; this generates the unlearned model from SG and the corresponding forget, retain, test, validation sets.
+  - then run `src/UnlearnSparse/baselines_run.sh`.
