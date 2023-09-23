@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import torch
@@ -111,7 +112,7 @@ class DefenderOPT(nn.Module):
         ## it's initialized here for having consistent number of train/test data
         self.kf = StratifiedShuffleSplit(n_splits=self.cv, test_size=0.3333, random_state=self.seed)    
         
-    def unlearn(self, net):
+    def unlearn(self, net, output_dir):
         """
             The unlearning algorithm, a.k.a, the defender's optimization problem.
 
@@ -197,16 +198,18 @@ class DefenderOPT(nn.Module):
                                                                           seed=self.seed,
                                                                           output_sc_fname=self.output_sc_fname,
                                                                           save=_save)
-            print(f'Epoch [{epoch+1}/{self.num_epoch}], ',
-                  f'U_d: {u_d.item():.4f}, ',
-                  f'U_a: {u_a.item():.4f}, ' if self.with_attacker else f'U_a: None, ',
-                  f'test accuracy: {test_accuracy:.4f}, ',
-                  f'forget accuracy: {forget_accuracy:.4f}, ',
-                  f'retain accuracy: {retain_accuracy:.4f}, ',
-                  f'att accuracy: {att_acc.item():.4f}, ' if self.with_attacker else f'att accuracy: None, ',
-                  f'MIA accuracy: {MIA_accuracy.item():.4f}, ',
-                  f'MIA auc: {MIA_auc.item():.4f}, ',
-                  f'MIA recall: {MIA_recall.item():.4f}, ')
+            os.makedirs(output_dir, exist_ok=True)
+            with open(os.path.join(output_dir, f'log_{self.seed}.txt'), 'a') as file_out:
+                print(f'Epoch [{epoch+1}/{self.num_epoch}], ',
+                      f'U_d: {u_d.item():.4f}, ',
+                      f'U_a: {u_a.item():.4f}, ' if self.with_attacker else f'U_a: None, ',
+                      f'test accuracy: {test_accuracy:.4f}, ',
+                      f'forget accuracy: {forget_accuracy:.4f}, ',
+                      f'retain accuracy: {retain_accuracy:.4f}, ',
+                      f'att accuracy: {att_acc.item():.4f}, ' if self.with_attacker else f'att accuracy: None, ',
+                      f'MIA accuracy: {MIA_accuracy.item():.4f}, ',
+                      f'MIA auc: {MIA_auc.item():.4f}, ',
+                      f'MIA recall: {MIA_recall.item():.4f}, ', file=file_out)
             print(f'time/epoch: {t_all:.4f} min; attacker opt: {t_att:.4f} ({t_att/t_all:.2f})')
             
 
