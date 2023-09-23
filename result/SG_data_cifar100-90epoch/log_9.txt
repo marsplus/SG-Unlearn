@@ -1,0 +1,2 @@
+Epoch [1/90],  U_d: -0.1114,  U_a: -0.9941,  test accuracy: 0.6766,  forget accuracy: 0.9944,  retain accuracy: 0.9951,  att accuracy: 0.5029,  MIA accuracy: 0.6915,  MIA auc: 0.7469,  MIA recall: 0.9320, 
+Epoch [2/90],  U_d: -0.5808,  U_a: -0.9874,  test accuracy: 0.5910,  forget accuracy: 0.8282,  retain accuracy: 0.8986,  att accuracy: 0.5062,  MIA accuracy: 0.6152,  MIA auc: 0.6556,  MIA recall: 0.7292, 

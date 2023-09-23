@@ -77,7 +77,7 @@ def main(args):
         if args.dataset == 'cifar10':
             local_path = args.model_path if args.model_path else os.path.join(ROOT_DIR, "../models/cifar10_resnet18_ckpt.pth")
         elif args.dataset == 'cifar100':
-            local_path = args.model_path if args.model_path else os.path.join(ROOT_DIR, "../models/[TO BE ADDED]")
+            local_path = args.model_path if args.model_path else os.path.join(ROOT_DIR, "../models/cifar100_resnet18_ckpt_native.pth")
         else:
             raise ValueError("Unknow dataset.\n")
     else:
@@ -115,7 +115,7 @@ def main(args):
                            device_id=args.device_id,
                            fine_tune=args.fine_tune,
                            att_classifier=args.att_classifier)
-    defender.unlearn(model_ft)
+    defender.unlearn(model_ft, args.output_dir)
     
     if args.save_checkpoint:
         checkpoint = model_ft.state_dict()
@@ -162,6 +162,7 @@ if __name__ == "__main__":
     parser.add_argument('--output_dir', type=str, default='.')
     parser.add_argument('--save_checkpoint', type=int, default=0)
     parser.add_argument('--model_path', type=str, default=None)
+    # parser.add_argument('--ckpt_path', type=str)
     args = parser.parse_args()
 
     RNG = torch.Generator().manual_seed(args.seed)
