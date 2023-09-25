@@ -2,3 +2,5 @@ data/
 *_cifar10.pth
 __pycache__
 *.pth
+*.tar
+*.p
