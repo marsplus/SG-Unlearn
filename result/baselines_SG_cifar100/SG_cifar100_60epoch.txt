@@ -1,0 +1,18 @@
+Average acc. (%)
+RA         0.844067
+TA         0.503400
+VA         0.502089
+FA         0.531333
+MIA_acc    0.515067
+MIA_auc    0.520195
+dtype: float64
+95% confidence
+RA         0.044812
+TA         0.016950
+VA         0.017682
+FA         0.020202
+MIA_acc    0.004574
+MIA_auc    0.005082
+dtype: float64
+tpr v.s. fpr
+[1.16244322 5.04679136 9.86324616]
