@@ -88,3 +88,4 @@ Epoch [87/90],  U_d: -0.0562,  U_a: -1.0042,  test accuracy: 0.4258,  forget acc
 Epoch [88/90],  U_d: -0.1363,  U_a: -0.9958,  test accuracy: 0.4404,  forget accuracy: 0.4442,  retain accuracy: 0.7302,  att accuracy: 0.5020,  MIA accuracy: 0.5180,  MIA auc: 0.5257,  MIA recall: 0.5054, 
 Epoch [89/90],  U_d: -0.1431,  U_a: -1.0028,  test accuracy: 0.4520,  forget accuracy: 0.4464,  retain accuracy: 0.7434,  att accuracy: 0.4985,  MIA accuracy: 0.5104,  MIA auc: 0.5105,  MIA recall: 0.4954, 
 Epoch [90/90],  U_d: -0.1345,  U_a: -0.9856,  test accuracy: 0.4536,  forget accuracy: 0.4612,  retain accuracy: 0.7700,  att accuracy: 0.5071,  MIA accuracy: 0.4988,  MIA auc: 0.5017,  MIA recall: 0.5018, 
+Epoch [1/90],  U_d: -0.0289,  U_a: -0.9973,  test accuracy: 0.7046,  forget accuracy: 0.9952,  retain accuracy: 0.9972,  att accuracy: 0.5013,  MIA accuracy: 0.6978,  MIA auc: 0.7415,  MIA recall: 0.9322, 
