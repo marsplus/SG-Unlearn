@@ -19,12 +19,80 @@ from models import DefenderOPT
 import torch.nn as nn
 # from resnet import resnet18
 from torchvision.models import resnet18
+import torch.nn.utils.prune as prune
+import copy
 
 import pdb
 
-# DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
+def prune_model_custom(model, mask_dict):
+
+    print('Pruning with custom mask (all conv layers)')
+    for name, m in model.named_modules():
+        if isinstance(m, nn.Conv2d):
+            mask_name = name+'.weight_mask'
+            if mask_name in mask_dict.keys():
+                prune.CustomFromMask.apply(
+                    m, 'weight', mask=mask_dict[name+'.weight_mask'])
+            else:
+                print('Can not find [{}] in mask_dict'.format(mask_name))
+
+
+def check_sparsity(model):
+
+    sum_list = 0
+    zero_sum = 0
+
+    for name, m in model.named_modules():
+        if isinstance(m, nn.Conv2d):
+            sum_list = sum_list+float(m.weight.nelement())
+            zero_sum = zero_sum+float(torch.sum(m.weight == 0))
+
+    if zero_sum:
+        remain_weight_ratie = 100*(1-zero_sum/sum_list)
+        print('* remain weight ratio = ', 100*(1-zero_sum/sum_list), '%')
+    else:
+        print('no weight for calculating sparsity')
+        remain_weight_ratie = None
+
+    return remain_weight_ratie
+
+
+# Mask operation function
+def extract_mask(model_dict):
+
+    new_dict = {}
+    for key in model_dict.keys():
+        if 'mask' in key:
+            new_dict[key] = copy.deepcopy(model_dict[key])
+
+    return new_dict
+
+class NormalizeByChannelMeanStd(torch.nn.Module):
+    def __init__(self, mean, std):
+        super(NormalizeByChannelMeanStd, self).__init__()
+        if not isinstance(mean, torch.Tensor):
+            mean = torch.tensor(mean)
+        if not isinstance(std, torch.Tensor):
+            std = torch.tensor(std)
+        self.register_buffer("mean", mean)
+        self.register_buffer("std", std)
+
+    def forward(self, tensor):
+        return self.normalize_fn(tensor, self.mean, self.std)
+
+    def extra_repr(self):
+        return "mean={}, std={}".format(self.mean, self.std)
+
+    def normalize_fn(self, tensor, mean, std):
+        """Differentiable version of torchvision.functional.normalize"""
+        # here we assume the color channel is in at dim=1
+        mean = mean[None, :, None, None]
+        std = std[None, :, None, None]
+        return tensor.sub(mean).div(std)
 
 def main(args):
     num_workers = 4
@@ -32,9 +100,10 @@ def main(args):
     ## download and pre-process CIFAR10
     if args.dataset == 'cifar10':
         transform = transforms.Compose(
-                    [
+            [
                 transforms.ToTensor(),
-                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))]
+            ]
+                # transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))]
             )
     elif args.dataset == 'cifar100':
         CIFAR100_TRAIN_MEAN = (0.5070751592371323, 0.48654887331495095, 0.4409178433670343)
@@ -48,7 +117,21 @@ def main(args):
             transforms.ToTensor(),
             transforms.Normalize(CIFAR100_TRAIN_MEAN, CIFAR100_TRAIN_STD)
         ])
-
+    elif args.dataset == 'svhn':
+        transform_train = transforms.Compose(
+            [
+                transforms.RandomCrop(32, padding=4),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            ]
+        )
+        transform_test = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            ]
+        )
 
     if args.dataset == 'cifar10':
         train_set = torchvision.datasets.CIFAR10(root="../data", train=True, download=True, transform=transform)
@@ -60,6 +143,11 @@ def main(args):
         train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
         held_out = torchvision.datasets.CIFAR100(root="../data", train=False, download=True, transform=transform_test)
         args.num_class = 100
+    elif args.dataset == 'svhn':
+        train_set = torchvision.datasets.SVHN("../data", split='train', transform=transform_train, download=True)
+        train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
+        held_out = torchvision.datasets.SVHN("../data", split='test', transform=transform_test, download=True)
+        args.num_class = 10
 
     test_set, val_set = random_split(held_out, [0.5, 0.5], generator=RNG)
     test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=num_workers)
@@ -77,18 +165,35 @@ def main(args):
         if args.dataset == 'cifar10':
             local_path = args.model_path if args.model_path else os.path.join(ROOT_DIR, "../models/cifar10_resnet18_ckpt.pth")
         elif args.dataset == 'cifar100':
-            local_path = args.model_path if args.model_path else os.path.join(ROOT_DIR, "../models/cifar100_resnet18_ckpt_native.pth")
+            local_path = args.model_path if args.model_path else os.path.join(ROOT_DIR, "../models/cifar100_resnet18_ckpt_71.pth")
+        elif args.dataset == 'svhn':
+            local_path = args.model_path if args.model_path else "/data1/zonglin/SG-Unlearn/src/svhn_ckpt.pth"
         else:
             raise ValueError("Unknow dataset.\n")
     else:
         raise ValueError("Unknow network architecture.\n")
-        
+
     weights_pretrained = torch.load(local_path, map_location=DEVICE)
+    # if args.dataset == 'svhn':
+    #     from models import resnet18
+    #     model_ft = resnet18(num_classes=args.num_class)
+    #     normalization = NormalizeByChannelMeanStd(
+    #         mean=[0.4377, 0.4438, 0.4728], std=[0.1201, 0.1231, 0.1052]
+    #     )
+    #     model_ft.normalize = normalization
+    #     model_ft.to(DEVICE)
+    #     if "state_dict" in weights_pretrained.keys():
+    #         checkpoint = weights_pretrained["state_dict"]
+    #     # current_mask = extract_mask(checkpoint)
+    #     # prune_model_custom(model_ft, current_mask)
+    #     # check_sparsity(model_ft)
+    #     weights_pretrained = checkpoint
+    # else:
     model_ft = resnet18(num_classes=args.num_class)
     ## change the first conv layer for smaller images
     model_ft.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1, bias=False)
-    model_ft.load_state_dict(weights_pretrained)
-    model_ft.to(DEVICE)
+    model_ft = model_ft.cuda()
+    model_ft.load_state_dict(weights_pretrained, strict=True)
 
     ## define the defender and run the unlearning algo.
     defender = DefenderOPT(retain_loader, 
@@ -142,7 +247,7 @@ if __name__ == "__main__":
     parser.add_argument('--cv', type=int, default=3)
     parser.add_argument('--with_attacker', type=int, default=1)
     parser.add_argument('--baseline_mode', type=int, default=0)
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--attacker_reg', type=float, default=0)
     parser.add_argument('--regular_type', type=str, default='l2')
     parser.add_argument('--regular_strength', type=float, default=0.5)
@@ -154,7 +259,7 @@ if __name__ == "__main__":
     parser.add_argument('--lr_scheduler', type=int, default=1)
     parser.add_argument('--device_id', type=int, default=0)
     parser.add_argument('--ts_baseline', type=int, default=0)
-    parser.add_argument('--dataset', type=str, default='cifar10')
+    parser.add_argument('--dataset', type=str, default='cifar100')
     parser.add_argument('--arch', type=str, default='resnet18')
     parser.add_argument('--fine_tune', type=int, default=1)
     parser.add_argument('--log_file', type=str, default='output.log')
