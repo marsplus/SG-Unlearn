@@ -17,6 +17,7 @@ elif [ "$dataset" == "cifar100" ]; then
 	d=100
 else
 	d=10
+fi
 
 for seed in {1..10}
 do
