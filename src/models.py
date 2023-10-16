@@ -191,8 +191,8 @@ class DefenderOPT(nn.Module):
                 ## _set_lr enables different lr for the defender and attacker
                 self._set_lr(optimizer, new_lr=self.attacker_lr) 
                 optimizer.zero_grad()
-                for (forget_data, forget_targets), (test_data, test_targets) in zip(self.forget_loader, self.test_loader):
-                    att_lik, att_acc, _ = self._attacker_opt(forget_data, forget_targets, test_data, test_targets, net)
+                for (forget_data, forget_targets), (val_data, val_targets) in zip(self.forget_loader, self.val_loader):
+                    att_lik, att_acc, _ = self._attacker_opt(forget_data, forget_targets, val_data, val_targets, net)
                     u_a = att_lik * self.attacker_strength
                     ## the defender wants to minimize the attacker's utility u_a
                     u_a.backward()
