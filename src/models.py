@@ -190,14 +190,14 @@ class DefenderOPT(nn.Module):
                 ## the attacker's utility
                 ## _set_lr enables different lr for the defender and attacker
                 self._set_lr(optimizer, new_lr=self.attacker_lr) 
+                optimizer.zero_grad()
                 for (forget_data, forget_targets), (test_data, test_targets) in zip(self.forget_loader, self.test_loader):
                     att_lik, att_acc, _ = self._attacker_opt(forget_data, forget_targets, test_data, test_targets, net)
                     u_a = att_lik * self.attacker_strength
-                    optimizer.zero_grad()
                     ## the defender wants to minimize the attacker's utility u_a
                     u_a.backward()
-                    optimizer.step()
-                
+                optimizer.step()
+
             scheduler.step()
             ## revert the lr back 
             self._set_lr(optimizer, new_lr=self.defender_lr)
@@ -370,8 +370,7 @@ class DefenderOPT(nn.Module):
 
         """
         assert net is not None, "The input net is None.\n"
-        ## the scores and memberships for test and forget sets
-        ## NOTICE: len(dataloader) != len(dataset)
+        ## make sure the auditing set is balanced
         ns = min(forget_data.shape[0], test_data.shape[0])
         forget_scores = DefenderOPT._generate_scores(net, forget_data, forget_targets, mode='train', dim=self.dim, device=self.device)
         test_scores   = DefenderOPT._generate_scores(net, test_data,   test_targets,   mode='train', dim=self.dim, device=self.device) # the naming is a bit bad here :(
@@ -496,7 +495,7 @@ class DefenderOPT(nn.Module):
     def _attacker_likelihood_SVM(self, X_tr, y_tr, X_te, y_te, fold_id, class_id) -> torch.Tensor:
         """
             Formulate the membership inference attack (MIA)  
-            as a differentiable layer of Logistic Regression (LR)
+            as a differentiable layer of SVM
         """
         n_sample = X_tr.shape[0]
         n_feature = X_tr.shape[1]
