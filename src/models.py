@@ -384,7 +384,9 @@ class DefenderOPT(nn.Module):
         assert net is not None, "The input net is None.\n"
         ## handle classwise setting
         if self.classwise and np.intersect1d(forget_targets.squeeze().numpy(), test_targets.squeeze().numpy()).size != 0:
-            test_data, test_targets = self._classwise_processing(test_data, test_targets, torch.unique(forget_targets))
+            # test_data, test_targets = self._classwise_processing(test_data, test_targets, torch.unique(forget_targets))
+            test_data, test_targets = self._classwise_processing(test_data, test_targets, torch.tensor([0], device=self.device))
+
 
         ## make sure the auditing set is balanced
         ns = min(forget_data.shape[0], test_data.shape[0])
@@ -428,88 +430,40 @@ class DefenderOPT(nn.Module):
             train_indices.to(self.device), test_indices.to(self.device)
             X_tr, y_tr, y_clas_tr = all_scores[train_indices], all_members[train_indices], all_clas[train_indices]
             X_te, y_te, y_clas_te = all_scores[test_indices], all_members[test_indices], all_clas[test_indices]
-            ## create a separate attacker for each class, as described in https://arxiv.org/abs/1610.05820
-            unique_clas = torch.unique(y_clas_tr).detach().to(torch.long)
-            for cl in unique_clas:
-                cls_idx_tr = torch.where(y_clas_tr == cl)
-                cls_idx_te = torch.where(y_clas_te == cl)
-                # attacker's likelihood and accuracy
-                att_lik, att_acc = self._attacker_likelihood(X_tr[cls_idx_tr], 
-                                                             y_tr[cls_idx_tr], 
-                                                             X_te[cls_idx_te], 
-                                                             y_te[cls_idx_te],
-                                                             fold_id=fold,
-                                                             class_id=cl.item(),
+            if not self.classwise:
+                ## create a separate attacker for each class, as described in https://arxiv.org/abs/1610.05820
+                unique_clas = torch.unique(y_clas_tr).detach().to(torch.long)
+                for cl in unique_clas:
+                    cls_idx_tr = torch.where(y_clas_tr == cl)
+                    cls_idx_te = torch.where(y_clas_te == cl)
+                    # attacker's likelihood and accuracy
+                    att_lik, att_acc = self._attacker_likelihood(X_tr[cls_idx_tr], 
+                                                                y_tr[cls_idx_tr], 
+                                                                X_te[cls_idx_te], 
+                                                                y_te[cls_idx_te],
+                                                                classifier=self.att_classifier)
+                    total_lik = total_lik + att_lik
+                    total_acc = total_acc + att_acc
+            else:
+                att_lik, att_acc = self._attacker_likelihood(X_tr, 
+                                                             y_tr,
+                                                             X_te,
+                                                             y_te,
                                                              classifier=self.att_classifier)
                 total_lik = total_lik + att_lik
                 total_acc = total_acc + att_acc
         return (total_lik / all_scores.size(0), total_acc / all_scores.size(0), wasserstein_dist)
     
 
-    def _attacker_likelihood(self, X_tr, y_tr, X_te, y_te, fold_id, class_id, classifier='SVM') -> torch.Tensor:
+    def _attacker_likelihood(self, X_tr, y_tr, X_te, y_te, classifier='SVM') -> torch.Tensor:
         if classifier == 'SVM':
-            return self._attacker_likelihood_SVM(X_tr, y_tr, X_te, y_te, fold_id, class_id)
-        elif classifier == 'LR':
-            return self._attacker_likelihood_LR(X_tr, y_tr, X_te, y_te, fold_id, class_id)
+            return self._attacker_likelihood_SVM(X_tr, y_tr, X_te, y_te)
         else:
             raise ValueError("Unsupported classifier for the attacker's problem.")
     
     
-    def _attacker_likelihood_LR(self, X_tr, y_tr, X_te, y_te, fold_id, class_id) -> torch.Tensor:
-        """
-            Formulate the membership inference attack (MIA)  
-            as a differentiable layer of Logistic Regression (LR)
 
-            The input data includes: 
-                1) X_tr/X_te: score outputs X from the unlearned model, which can be (n, 1) (when the scores are scalars) 
-                              or (n, k) (when the scores are vectors)
-                2) y_tr/y_te: labels indicating membership of test/forget sets; shape=(n, )
-            Parameters:
-                (X_tr, y_tr): data to train the LR
-                (X_te, y_te): data to test how good the LR is
-                (fold_id, class_id): identifies the attacker's optimization problem 
-                                     for the particular combination of (fold, clas)
-
-            Returns:
-                Ua: the attacker's likelihood
-        """
-        ## the first time to initiate an attacker
-        n_sample = X_tr.shape[0]
-        n_feature = X_tr.shape[1]
-
-        ## define the optimization of logistic regression in cvxpy
-        beta = cp.Variable((n_feature, 1))
-        b = cp.Variable((1, 1))
-        data = cp.Parameter((n_sample, n_feature))
-        if int(torch.__version__[0]) > int(REF_VERSION[0]) or int(torch.__version__.split('.')[1]) >= int(REF_VERSION.split('.')[1]):
-            Y = y_tr.numpy(force=True)[:, np.newaxis]
-        else:
-            Y = y_tr.detach().cpu().numpy()[:, np.newaxis]
-        t = data @ beta + b
-        loglik = (1. / n_sample) * cp.sum(
-            cp.multiply(Y, t) - cp.logistic(t)
-        )
-        reg = -self.attacker_reg * cp.sum_squares(beta)
-        prob = cp.Problem(cp.Maximize(loglik + reg))
-        attacker_layer = CvxpyLayer(prob, [data], [beta, b])
-        ## run (X_tr, y_tr) through the attacker layer
-        beta_tch, b_tch = attacker_layer(X_tr, solver_args={'solve_method':'SCS'})
-
-        ## will average later
-        loss_func = nn.BCEWithLogitsLoss(reduction='sum') 
-        ## the attacker's utility, i.e., the negative of the cross-entropy loss 
-        t = X_te @ beta_tch + b_tch
-        attacker_likelihood = -loss_func(t.squeeze(), y_te*1.0)
-        ## the attacker's accuracy
-        with torch.no_grad():
-            probs = torch.sigmoid(t)
-            ## the forget data is labeld as 1
-            preds = torch.where(probs >= 0.5, torch.tensor(1, device=self.device), torch.tensor(0, device=self.device))
-            attacker_accuracy = (preds.squeeze() == y_te).sum().item()
-        return (attacker_likelihood, attacker_accuracy)
-
-        
-    def _attacker_likelihood_SVM(self, X_tr, y_tr, X_te, y_te, fold_id, class_id) -> torch.Tensor:
+    def _attacker_likelihood_SVM(self, X_tr, y_tr, X_te, y_te) -> torch.Tensor:
         """
             Formulate the membership inference attack (MIA)  
             as a differentiable layer of SVM
