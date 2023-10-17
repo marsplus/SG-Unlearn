@@ -68,7 +68,8 @@ class DefenderOPT(nn.Module):
                  fine_tune: bool = True,
                  att_classifier: str = 'SVM',
                  attacker_strength: float = 1.0,
-                 save_checkpoint: bool = True):
+                 save_checkpoint: bool = True,
+                 classwise: bool = False):
         """
             dim: the dimension of the score vectors. 
                  If dim=1, the scores are the final scalar losses (e.g., cross-entropy).
@@ -105,6 +106,7 @@ class DefenderOPT(nn.Module):
         self.att_classifier = att_classifier
         self.attacker_strength = attacker_strength
         self.save_checkpoint = save_checkpoint
+        self.classwise = classwise
 
         ## whether to fine-tune on the retain set
         self.fine_tune = fine_tune
@@ -355,6 +357,16 @@ class DefenderOPT(nn.Module):
         return torch.tensor(0.0, device=self.device)
 
 
+    def _classwise_processing(self, data, targets, forget_classes):
+        ## remove the data from the class to be forgetten
+        data_copy = data.clone()
+        targets_copy = targets.clone()
+        mask = ~torch.any(targets.unsqueeze(1) == forget_classes.unsqueeze(0), dim=1)
+        data_copy = data_copy[mask]
+        targets_copy = targets[mask]
+        return (data_copy, targets_copy)
+
+
     def _attacker_opt(self, 
                       forget_data: torch.Tensor,
                       forget_targets: torch.Tensor,
@@ -370,10 +382,15 @@ class DefenderOPT(nn.Module):
 
         """
         assert net is not None, "The input net is None.\n"
+        ## handle classwise setting
+        if self.classwise and np.intersect1d(forget_targets.squeeze().numpy(), test_targets.squeeze().numpy()).size != 0:
+            test_data, test_targets = self._classwise_processing(test_data, test_targets, torch.unique(forget_targets))
+
         ## make sure the auditing set is balanced
         ns = min(forget_data.shape[0], test_data.shape[0])
         forget_scores = DefenderOPT._generate_scores(net, forget_data, forget_targets, mode='train', dim=self.dim, device=self.device)
-        test_scores   = DefenderOPT._generate_scores(net, test_data,   test_targets,   mode='train', dim=self.dim, device=self.device) # the naming is a bit bad here :(
+        ## the naming below is bad; the `test_data` actually represents the `val_data`
+        test_scores   = DefenderOPT._generate_scores(net, test_data,   test_targets,   mode='train', dim=self.dim, device=self.device) 
         all_scores = torch.cat((forget_scores[:ns], test_scores[:ns]), axis=0) # shape=(ns, dim)
         all_clas = torch.cat((forget_targets[:ns], test_targets[:ns]), axis=0).to(torch.long) # shape=(ns, )
         forget_members, test_members = torch.ones(ns, device=self.device), torch.zeros(ns, device=self.device)
@@ -624,7 +641,8 @@ if __name__ == "__main__":
                            defender_lr=0.01,
                            attacker_lr=0.01,
                            with_attacker=True,
-                           save_checkpoint=False)
+                           save_checkpoint=False,
+                           classwise=True)
     t_start = time.time()
     defender.unlearn(net)
     t_end = time.time() - t_start
