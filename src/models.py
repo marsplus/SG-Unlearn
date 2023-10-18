@@ -194,13 +194,13 @@ class DefenderOPT(nn.Module):
                 self._set_lr(optimizer, new_lr=self.attacker_lr) 
                 optimizer.zero_grad()
                 ## the gradient of the attacker's optimization w.r.t. the model parameters:
-                ## Let N = #(forget data), B=batch size
+                ## Let N = 2*min(#forget data, #test data); B = batch size = 2*(#forget data, #test data)
                 ## batched version (memory intensive): (1/N) * (dL / dw)
                 ## mini batch version (memory friendly): (1/B) * (dL / dw), so we need to multiply by a factor of (B/N)
-                N = len(self.forget_loader.dataset)
+                N = min(len(self.forget_loader.dataset), len(self.val_loader.dataset))
                 for (forget_data, forget_targets), (val_data, val_targets) in zip(self.forget_loader, self.val_loader):
                     ## this is inside the loop because the batch sizes may be different from each other
-                    B = forget_data.shape[0]
+                    B = min(forget_data.shape[0], val_data.shape[0])
                     att_lik, att_acc, _ = self._attacker_opt(forget_data, forget_targets, val_data, val_targets, net)
                     u_a = att_lik * self.attacker_strength * (B/N)
                     ## the defender wants to minimize the attacker's utility u_a
