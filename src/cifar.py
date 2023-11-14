@@ -1,4 +1,4 @@
--import os
+import os
 import sys
 sys.path.append('../src')
 
@@ -152,7 +152,8 @@ def main(args):
                            fine_tune=args.fine_tune,
                            att_classifier=args.att_classifier,
                            attacker_strength=args.attacker_strength,
-                           save_checkpoint=args.save_checkpoint)
+                           save_checkpoint=args.save_checkpoint,
+                           classwise=args.classwise)
     defender.unlearn(model_ft)
 
 
@@ -187,7 +188,8 @@ if __name__ == "__main__":
     parser.add_argument('--output_dir', type=str, default='.')
     parser.add_argument('--save_checkpoint', type=int, default=0)
     parser.add_argument('--model_path', type=str, default=None)
-    parser.add_argument('--mem_save', type=int, default=10)
+    parser.add_argument('--mem_save', type=int, default=20)
+    parser.add_argument('--classwise', type=int, default=0)
     args = parser.parse_args()
 
     RNG = torch.Generator().manual_seed(args.seed)

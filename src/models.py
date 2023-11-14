@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 
 # from qpth.qp import QPFunction
 
-from utils import BinaryClassificationDataset
+from utils import BinaryClassificationDataset, wasserstein_distance_1d
 from sklearn.svm import LinearSVC
 from sklearn.model_selection import StratifiedShuffleSplit, cross_val_score, StratifiedKFold
 
@@ -119,6 +119,9 @@ class DefenderOPT(nn.Module):
         ## it's initialized here for having consistent number of train/test data
         self.kf = StratifiedShuffleSplit(n_splits=self.cv, test_size=0.3, random_state=self.seed)    
         # self.kf = StratifiedKFold(n_splits=self.cv)
+        
+        if self.attacker_strength == 0.0:
+            self.with_attacker = 0
 
     def _save_ckpt(self, model, epoch):
         SG_data = {
@@ -174,6 +177,8 @@ class DefenderOPT(nn.Module):
                   f'MIA accuracy: {MIA_accuracy.item():.4f}, '
                   f'MIA auc: {MIA_auc.item():.4f}, '
                   f'MIA recall: {MIA_recall.item():.4f}')
+            epoch = 0
+            self._save_ckpt(net, epoch)
             return net
 
         net.train()

@@ -14,7 +14,7 @@ from torchvision.models import resnet18
 
 
 import mia_evaluate
-from utils import evaluate_accuracy
+from utils import evaluate_accuracy, wasserstein_distance_1d
 
 
 from scipy.stats import ks_2samp
@@ -57,6 +57,10 @@ def evaluate_model(model=None, data=None, batch_size=128, seed=1, device='cuda:0
     ks_statistic, kp_value = ks_2samp(forget_losses, test_losses)
     ret['KS statistic'] = ks_statistic
     ret['KS p-value']   = kp_value
+    
+    ## evaluate 1d wasserstein distance between forget_losses and test_losses
+    wass_dist = wasserstein_distance_1d(forget_losses, test_losses)
+    ret['wasserstein distance'] = wass_dist
     return ret
 
 
@@ -67,9 +71,9 @@ def get_stats(path_to_ckpts, is_SG=False):
     ## the evaluation metric to decide which hyper-params to choose
     evaluate_func = lambda ret: ret['val accuracy'] - ret['MIA accuracy']
     if not is_SG:
-        all_ckpts = [torch.load(f)['evaluation_result'] for f in path_to_ckpts]
+        all_ckpts = [torch.load(f, map_location='cuda:0')['evaluation_result'] for f in path_to_ckpts]
     else:
-        all_ckpts = [torch.load(f) for f in path_to_ckpts]
+        all_ckpts = [torch.load(f, map_location='cuda:0') for f in path_to_ckpts]
     n = len(all_ckpts)
     ret = defaultdict(float)
     for d in all_ckpts:
@@ -178,7 +182,7 @@ def SG_hyperparam_search(args):
     for ep in [5, 10, 15, 20, 25, 30]:
         path_to_ckpts = glob.glob(os.path.join(
             args.baseline_path,
-            f"{args.dataset}/eval_num_epoch_{ep}_cv_3_dim_{dim}_atts_{args.attacker_strength}_seed_*.pth"
+            f"{args.dataset}/eval_num_epoch_{ep}_cv_3_dim_{dim}_atts_1.0_seed_*.pth"
         ))
         if not path_to_ckpts: continue
         eval_metric, ret = get_stats(path_to_ckpts, is_SG=True)
