@@ -1,16 +1,24 @@
 import math
 import torch
 import numpy as np
-import cvxpy as cp
+
+import torch.nn as nn
 from torch import default_generator, randperm
 from torch._utils import _accumulate
 from torch.utils.data.dataset import Subset
 from torch.utils.data import Dataset
+
 from typing import List
 import warnings
 
 from sklearn.datasets import make_blobs
 from sklearn import linear_model, model_selection
+
+def wasserstein_distance_1d(dist1, dist2):
+    dist1_sorted = sorted(dist1)
+    dist2_sorted = sorted(dist2)
+    return np.mean(np.abs(np.array(dist1_sorted) - np.array(dist2_sorted)))
+
 
 def random_split(dataset, lengths,
                  generator=default_generator):
@@ -94,9 +102,67 @@ def simple_mia(sample_loss, members, n_splits=10, random_state=0):
     cv = model_selection.StratifiedShuffleSplit(
         n_splits=n_splits, random_state=random_state
     )
-    return model_selection.cross_val_score(
-        attack_model, sample_loss, members, cv=cv, scoring="accuracy"
-    )
+    acc = model_selection.cross_val_score(attack_model, sample_loss, members, cv=cv, scoring="accuracy").mean()
+    auc = model_selection.cross_val_score(attack_model, sample_loss, members, cv=cv, scoring="roc_auc").mean()
+    return (acc, auc)
+
+
+def compute_losses(net, loader, device):
+    """Auxiliary function to compute per-sample losses"""
+
+    criterion = nn.CrossEntropyLoss(reduction="none")
+    all_losses = []
+
+    for inputs, targets in loader:
+        inputs, targets = inputs.to(device), targets.to(device)
+
+        logits = net(inputs)
+        losses = criterion(logits, targets).detach().cpu().numpy()
+        for l in losses:
+            all_losses.append(l)
+
+    return np.array(all_losses)
+
+
+def evaluate_accuracy(model, data_loader, device='cpu'):
+    """
+    Evaluate the accuracy of a PyTorch model using a DataLoader.
+
+    Parameters:
+    - model: A PyTorch model.
+    - data_loader: A PyTorch DataLoader with the dataset.
+
+    Returns:
+    - Accuracy of the model on the dataset.
+    """
+    
+    # Ensure the model is in evaluation mode
+    model.eval()
+    
+    # Variables to store total correct predictions and total predictions
+    total_correct = 0
+    total_predictions = 0
+    
+    # No need to track gradients during evaluation
+    with torch.no_grad():
+        for inputs, labels in data_loader:
+            # Move data to the same device as the model if necessary
+            inputs, labels = inputs.to(device), labels.to(device)
+            
+            # Compute model's predictions
+            outputs = model(inputs)
+            
+            # Get the predicted class for each example in the batch
+            _, predicted = torch.max(outputs, 1)
+            
+            # Update total predictions and total correct predictions
+            total_predictions += labels.size(0)
+            total_correct += (predicted == labels).sum().item()
+    
+    # Compute accuracy
+    accuracy = total_correct / total_predictions
+    return accuracy
+
 
 
 # Define a custom dataset class
@@ -122,5 +188,3 @@ class BinaryClassificationDataset(Dataset):
 
     def __getitem__(self, index):
         return self.data[index], self.labels[index]
-
-
