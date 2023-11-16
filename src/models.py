@@ -218,13 +218,26 @@ class DefenderOPT(nn.Module):
         net.train()
         for epoch in range(self.num_epoch):
             t_start = time.time()
-            for inputs, targets in self.retain_loader:
-                inputs, targets = inputs.to(self.device), targets.to(self.device)
-                optimizer.zero_grad()
-                outputs = net(inputs)
-                u_d = -loss_func(outputs, targets)
-                (-u_d).backward()
-                optimizer.step()
+            try:
+                for inputs, targets in self.retain_loader:
+                    inputs, targets = inputs.to(self.device), targets.to(self.device)
+                    optimizer.zero_grad()
+                    outputs = net(inputs)
+                    u_d = -loss_func(outputs, targets)
+                    (-u_d).backward()
+                    optimizer.step()
+            except ValueError as e:
+                for inputs, masks, targets in self.retain_loader:
+                    inputs, masks, targets = (
+                        inputs.to(self.device),
+                        masks.to(self.device),
+                        targets.to(self.device),
+                    )
+                    optimizer.zero_grad()
+                    outputs = net(inputs, masks)
+                    u_d = -loss_func(outputs, targets)
+                    (-u_d).backward()
+                    optimizer.step()
 
             t_att_start = time.time()
             if self.with_attacker:
@@ -237,17 +250,38 @@ class DefenderOPT(nn.Module):
                 ## batched version (memory intensive): (1/N) * (dL / dw)
                 ## mini batch version (memory friendly): (1/B) * (dL / dw), so we need to multiply by a factor of (B/N)
                 N = min(len(self.forget_loader.dataset), len(self.val_loader.dataset))
-                for (forget_data, forget_targets), (val_data, val_targets) in zip(
-                    self.forget_loader, self.val_loader
-                ):
-                    ## this is inside the loop because the batch sizes may be different from each other
-                    B = min(forget_data.shape[0], val_data.shape[0])
-                    att_lik, att_acc, _ = self._attacker_opt(
-                        forget_data, forget_targets, val_data, val_targets, net
-                    )
-                    u_a = att_lik * self.attacker_strength * (B / N)
-                    ## the defender wants to minimize the attacker's utility u_a
-                    u_a.backward()
+                try:
+                    for (forget_data, forget_targets), (val_data, val_targets) in zip(
+                        self.forget_loader, self.val_loader
+                    ):
+                        ## this is inside the loop because the batch sizes may be different from each other
+                        B = min(forget_data.shape[0], val_data.shape[0])
+                        att_lik, att_acc, _ = self._attacker_opt(
+                            forget_data,
+                            forget_targets,
+                            val_data,
+                            val_targets,
+                            net,
+                        )
+                        u_a = att_lik * self.attacker_strength * (B / N)
+                        ## the defender wants to minimize the attacker's utility u_a
+                        u_a.backward()
+                except ValueError as e:
+                    for (forget_data, forget_masks, forget_targets), (
+                        val_data,
+                        val_masks,
+                        val_targets,
+                    ) in zip(self.forget_loader, self.val_loader):
+                        B = min(forget_data.shape[0], val_data.shape[0])
+                        att_lik, att_acc, _ = self._attacker_opt(
+                            forget_data,
+                            forget_targets,
+                            val_data,
+                            val_targets,
+                            net,
+                            forget_masks,
+                            val_masks,
+                        )
                 optimizer.step()
 
             scheduler.step()
@@ -329,6 +363,39 @@ class DefenderOPT(nn.Module):
         return new_score
 
     @staticmethod
+    def _generate_scores_w_masks(
+        net,
+        inputs: torch.Tensor,
+        masks: torch.Tensor,
+        targets: torch.Tensor,
+        mode="train",
+        dim: int = 1,
+        device="cpu",
+    ):
+        """
+        Feed the test and forget sets through the unlearned model,
+        and collect the output scores with the corresponding class labels.
+
+        Parameters:
+            inputs: the input data (either forget or test)
+
+        Return:
+            scores: the score vectors with shape (n, dim)
+            clas: class labels with shape (n, ).
+        """
+        net.train() if mode == "train" else net.eval()
+        criterion = nn.CrossEntropyLoss(reduction="none")
+        inputs, targets, masks = inputs.to(device), targets.to(device), masks.to(device)
+        outputs = net(inputs, masks)
+        losses = criterion(outputs, targets)
+        new_score = (
+            losses[:, None]
+            if dim == 1
+            else torch.cat((outputs, losses[:, None]), axis=1)
+        )
+        return new_score
+
+    @staticmethod
     def _set_lr(optimizer, new_lr):
         """
         set the learn rate of the input optimizer
@@ -372,25 +439,65 @@ class DefenderOPT(nn.Module):
         """
         all_scores = []
         all_members = []
-        for (forget_data, forget_targets), (test_data, test_targets) in zip(
-            forget_loader, test_loader
-        ):
-            ns = min(forget_data.shape[0], test_data.shape[0])
-            forget_scores = DefenderOPT._generate_scores(
-                net, forget_data, forget_targets, mode="eval", dim=dim, device=device
-            )
-            test_scores = DefenderOPT._generate_scores(
-                net, test_data, test_targets, mode="eval", dim=dim, device=device
-            )  # the naming is a bit bad here :(
-            forget_members, test_members = torch.ones(ns, device=device), torch.zeros(
-                ns, device=device
-            )
-            all_scores.append(
-                torch.cat((forget_scores[:ns], test_scores[:ns]), axis=0)
-            )  # shape=(ns, dim)
-            all_members.append(
-                torch.cat((forget_members, test_members), axis=0)
-            )  # shape=(ns, )
+        try:
+            for (forget_data, forget_targets), (test_data, test_targets) in zip(
+                forget_loader, test_loader
+            ):
+                ns = min(forget_data.shape[0], test_data.shape[0])
+                forget_scores = DefenderOPT._generate_scores(
+                    net,
+                    forget_data,
+                    forget_targets,
+                    mode="eval",
+                    dim=dim,
+                    device=device,
+                )
+                test_scores = DefenderOPT._generate_scores(
+                    net, test_data, test_targets, mode="eval", dim=dim, device=device
+                )  # the naming is a bit bad here :(
+                forget_members, test_members = torch.ones(
+                    ns, device=device
+                ), torch.zeros(ns, device=device)
+                all_scores.append(
+                    torch.cat((forget_scores[:ns], test_scores[:ns]), axis=0)
+                )  # shape=(ns, dim)
+                all_members.append(
+                    torch.cat((forget_members, test_members), axis=0)
+                )  # shape=(ns, )
+        except ValueError as e:
+            for (forget_data, forget_masks, forget_targets), (
+                test_data,
+                test_masks,
+                test_targets,
+            ) in zip(forget_loader, test_loader):
+                ns = min(forget_data.shape[0], test_data.shape[0])
+                forget_scores = DefenderOPT._generate_scores_w_masks(
+                    net,
+                    forget_data,
+                    forget_masks,
+                    forget_targets,
+                    mode="eval",
+                    dim=dim,
+                    device=device,
+                )
+                test_scores = DefenderOPT._generate_scores_w_masks(
+                    net,
+                    test_data,
+                    test_masks,
+                    test_targets,
+                    mode="eval",
+                    dim=dim,
+                    device=device,
+                )  # the naming is a bit bad here :(
+                forget_members, test_members = torch.ones(
+                    ns, device=device
+                ), torch.zeros(ns, device=device)
+                all_scores.append(
+                    torch.cat((forget_scores[:ns], test_scores[:ns]), axis=0)
+                )  # shape=(ns, dim)
+                all_members.append(
+                    torch.cat((forget_members, test_members), axis=0)
+                )  # shape=(ns, )
         all_scores = torch.cat(all_scores, axis=0)
         all_members = torch.cat(all_members, axis=0)
 
@@ -456,6 +563,8 @@ class DefenderOPT(nn.Module):
         test_data: torch.Tensor,
         test_targets: torch.Tensor,
         net=None,
+        forget_masks=None,
+        test_masks=None,
     ):
         """
         The attacker's utility maximizing problem.
@@ -481,18 +590,44 @@ class DefenderOPT(nn.Module):
 
         ## make sure the auditing set is balanced
         ns = min(forget_data.shape[0], test_data.shape[0])
-        forget_scores = DefenderOPT._generate_scores(
-            net,
-            forget_data,
-            forget_targets,
-            mode="train",
-            dim=self.dim,
-            device=self.device,
-        )
-        ## the naming below is bad; the `test_data` actually represents the `val_data`
-        test_scores = DefenderOPT._generate_scores(
-            net, test_data, test_targets, mode="train", dim=self.dim, device=self.device
-        )
+        if forget_masks is None and test_masks is None:
+            forget_scores = DefenderOPT._generate_scores(
+                net,
+                forget_data,
+                forget_targets,
+                mode="train",
+                dim=self.dim,
+                device=self.device,
+            )
+            ## the naming below is bad; the `test_data` actually represents the `val_data`
+            test_scores = DefenderOPT._generate_scores(
+                net,
+                test_data,
+                test_targets,
+                mode="train",
+                dim=self.dim,
+                device=self.device,
+            )
+        else:
+            forget_scores = DefenderOPT._generate_scores_w_masks(
+                net,
+                forget_data,
+                forget_masks,
+                forget_targets,
+                mode="train",
+                dim=self.dim,
+                device=self.device,
+            )
+            ## the naming below is bad; the `test_data` actually represents the `val_data`
+            test_scores = DefenderOPT._generate_scores_w_masks(
+                net,
+                test_data,
+                test_masks,
+                test_targets,
+                mode="train",
+                dim=self.dim,
+                device=self.device,
+            )
         all_scores = torch.cat(
             (forget_scores[:ns], test_scores[:ns]), axis=0
         )  # shape=(ns, dim)

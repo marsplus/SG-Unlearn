@@ -122,7 +122,7 @@ def main():
     # torch.save(output_data, f'processed_data/splitData_{args.dataset}_{args.seed}.pth')
 
     RNG = torch.Generator().manual_seed(args.seed)
-    SG_data = torch.load(f'../../result/SG_data/SGdata_seed_{args.seed}_{args.dataset}.pth')
+    SG_data = torch.load(f'/data1/zonglin/SG-Unlearn/result/SG_data_cifar100-30epoch/SGdata_seed_{args.seed}_{args.dataset}.pth') # TODO:
     
     retain_dataset = SG_data['retain']
     test_dataset   = SG_data['test']
@@ -165,7 +165,10 @@ def main():
 
     model = resnet18(num_classes=args.num_classes)
     model.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1, bias=False)
-    local_path = "../../models/cifar10_resnet18_ckpt.pth"
+    if args.dataset == "cifar10":
+        local_path = "/data1/zonglin/SG-Unlearn/models/cifar10_resnet18_ckpt.pth" #TODO:
+    elif args.dataset == "cifar100":
+        local_path = "/data1/zonglin/SG-Unlearn/models/cifar100_resnet18_ckpt_native.pth"
     weights_pretrained = torch.load(local_path, map_location=device)
     model.load_state_dict(weights_pretrained)
     model.cuda()
