@@ -88,6 +88,7 @@ def FT_hyperparam_search(args):
     best = None
     best_param = (None, None)
     for lr in [0.0001, 0.001, 0.01, 0.1]:
+    # for lr in ['0.0000001', '0.000001', '0.00001']:   ## for 20 Newsgroups
         for ep in [5, 10, 15]:
             folder_path = os.path.join(args.baseline_path, f'FT/{args.dataset}/lr_{lr}_nepoch_{ep}')
             path_to_ckpts = [os.path.join(folder_path, f) for f in os.listdir(folder_path) 
@@ -106,16 +107,23 @@ def GA_hyperparam_search(args):
     best_metric = float('-inf')
     best = None
     best_param = (None, None)
-    for lr in [0.000001, 0.00001, 0.0001, 0.001]:
+    for lr in ['0.000001', '0.00001', '0.0001', '0.001']:
+    # for lr in ['0.0000001', '0.00000001', '0.000001', '0.00001', '0.0001', '0.001']:   ## for 20 Newsgroups
         for ep in [5, 10, 15]:
-            if lr == 0.000001:
-                folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.000001_nepoch_{ep}')
-            elif lr == 0.00001:
-                folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.00001_nepoch_{ep}')
-            elif lr == 0.0001:
-                folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.0001_nepoch_{ep}')
-            else:
-                folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.001_nepoch_{ep}')
+            # if lr == '0.000001':
+            #     folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.000001_nepoch_{ep}')
+            # elif lr == '0.00001':
+            #     folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.00001_nepoch_{ep}')
+            # elif lr == '0.0001':
+            #     folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.0001_nepoch_{ep}')
+            # elif lr == '0.0000001':
+            #     folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.0000001_nepoch_{ep}')
+            # elif lr == '0.00000001':
+            #     folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.00000001_nepoch_{ep}')
+            # else:
+            #     folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.001_nepoch_{ep}')
+            
+            folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_{lr}_nepoch_{ep}')
             path_to_ckpts = [os.path.join(folder_path, f) for f in os.listdir(folder_path) 
                             if f.endswith('.tar') and os.path.isfile(os.path.join(folder_path, f))]
             if not path_to_ckpts: continue
@@ -175,7 +183,15 @@ def retrain_hyperparam_search(args):
 
 
 def SG_hyperparam_search(args):
-    dim = 100 if args.dataset == 'cifar100' else 10
+    # dim = 100 if args.dataset == 'cifar100' else 10
+    if args.dataset in ['cifar10', 'svhn']:
+        dim = 10
+    elif args.dataset in ['cifar100']:
+        dim = 100
+    elif args.dataset in ['20ng']:
+        dim = 20
+    else:
+        raise ValueError
     best_metric = float('-inf')
     best = None
     best_param = None
@@ -226,7 +242,7 @@ if __name__ == "__main__":
     elif args.baseline == 'SG':
         best_ret = SG_hyperparam_search(args)
 
-    best_ret['time'] /= 60.0
+    # best_ret['time'] /= 60.0
     for key, value in best_ret.items():
         if 'losses' not in key:
             print(f"{key}: {value:.4f}")

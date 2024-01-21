@@ -12,11 +12,9 @@ from torch.utils.data import DataLoader
 
 import torchvision
 from torchvision import transforms
-from torchvision.utils import make_grid
 
 from utils import random_split
 from models import DefenderOPT
-from evaluate import evaluate_model
 
 import torch.nn as nn
 
@@ -166,7 +164,7 @@ def main(args):
         ) = utils_20ng.load_corpus("20ng")
         nb_node = adj.shape[0]
         nb_train, nb_val, nb_test = train_mask.sum(), val_mask.sum(), test_mask.sum()
-        nb_forget = int(nb_train * 0.1)
+        nb_forget = int(nb_train * 0.2)
         nb_retain = nb_train - nb_forget
         nb_class = y_train.shape[1]
         # args.num_classes = nb_class
@@ -175,11 +173,11 @@ def main(args):
 
         model = BertClassifier(
             pretrained_model="bert-base-uncased", nb_class=nb_class
-        ).cuda()
+        ).to(DEVICE)
         # args.num_classes = nb_class
         y = torch.LongTensor((y_train + y_val + y_test).argmax(axis=1))
 
-        corpus_file = "/data1/zonglin/SG-Unlearn/20ng/" + "20ng" + "_shuffle.txt"
+        corpus_file = os.path.join(ROOT_DIR, "../data/20ng/20ng_shuffle.txt")
         with open(corpus_file, "r") as f:
             text = f.read()
             text = text.replace("\\", "")
@@ -295,11 +293,11 @@ def main(args):
                 else os.path.join(ROOT_DIR, "../models/svhn_ckpt.pth")
             )
         elif args.dataset == "20ng":
-            local_path = "/data1/zonglin/CSE-842-proj/checkpoint/bert-base-uncased_20ng/checkpoint.pth"
+            local_path = os.path.join(ROOT_DIR, "../models/checkpoint.pth")
         else:
             raise ValueError("Unknow dataset.\n")
     elif args.arch == "Bert":
-        local_path = "/data1/zonglin/CSE-842-proj/checkpoint/bert-base-uncased_20ng/checkpoint.pth"
+        local_path = os.path.join(ROOT_DIR, "../models/checkpoint.pth")
     else:
         raise ValueError("Unknow network architecture.\n")
 

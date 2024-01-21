@@ -117,19 +117,11 @@ class DefenderOPT(nn.Module):
         self.save_checkpoint = save_checkpoint
         self.classwise = classwise
 
-        ## whether to fine-tune on the retain set
-        self.fine_tune = fine_tune
-
-        ## keeps the attacker's optimization problems in memory
-        ## for warm-start the solvers
-        self.attacker_opt_cache = {}
-
         ## cross-validation split used in the attacker's optimization
         ## it's initialized here for having consistent number of train/test data
         self.kf = StratifiedShuffleSplit(
             n_splits=self.cv, test_size=0.3, random_state=self.seed
         )
-        # self.kf = StratifiedKFold(n_splits=self.cv)
 
         if self.attacker_strength == 0.0:
             self.with_attacker = 0
@@ -250,30 +242,16 @@ class DefenderOPT(nn.Module):
                 ## batched version (memory intensive): (1/N) * (dL / dw)
                 ## mini batch version (memory friendly): (1/B) * (dL / dw), so we need to multiply by a factor of (B/N)
                 N = min(len(self.forget_loader.dataset), len(self.val_loader.dataset))
-                try:
-                    for (forget_data, forget_targets), (val_data, val_targets) in zip(
-                        self.forget_loader, self.val_loader
-                    ):
-                        ## this is inside the loop because the batch sizes may be different from each other
-                        B = min(forget_data.shape[0], val_data.shape[0])
-                        att_lik, att_acc, _ = self._attacker_opt(
-                            forget_data,
-                            forget_targets,
-                            val_data,
-                            val_targets,
-                            net,
-                        )
-                        u_a = att_lik * self.attacker_strength * (B / N)
-                        ## the defender wants to minimize the attacker's utility u_a
-                        u_a.backward()
-                except ValueError as e:
-                    for (forget_data, forget_masks, forget_targets), (
-                        val_data,
-                        val_masks,
-                        val_targets,
-                    ) in zip(self.forget_loader, self.val_loader):
-                        B = min(forget_data.shape[0], val_data.shape[0])
-                        att_lik, att_acc, _ = self._attacker_opt(
+                for forget_batch, val_batch in zip(self.forget_loader, self.val_loader):
+                    # Determine if masks are included
+                    if len(forget_batch) == 2:
+                        forget_data, forget_targets = forget_batch
+                        val_data, val_targets = val_batch
+                        args = (forget_data, forget_targets, val_data, val_targets, net)
+                    else:
+                        forget_data, forget_masks, forget_targets = forget_batch
+                        val_data, val_masks, val_targets = val_batch
+                        args = (
                             forget_data,
                             forget_targets,
                             val_data,
@@ -282,8 +260,13 @@ class DefenderOPT(nn.Module):
                             forget_masks,
                             val_masks,
                         )
+                    B = min(forget_data.shape[0], val_data.shape[0])
+                    # Compute attacker likelihood, accuracy, and other metrics
+                    att_lik, att_acc, _ = self._attacker_opt(*args)
+                    # Calculate the attacker's utility
+                    u_a = att_lik * self.attacker_strength * (B / N)
+                    u_a.backward()
                 optimizer.step()
-
             scheduler.step()
             ## revert the lr back
             self._set_lr(optimizer, new_lr=self.defender_lr)
@@ -373,15 +356,7 @@ class DefenderOPT(nn.Module):
         device="cpu",
     ):
         """
-        Feed the test and forget sets through the unlearned model,
-        and collect the output scores with the corresponding class labels.
-
-        Parameters:
-            inputs: the input data (either forget or test)
-
-        Return:
-            scores: the score vectors with shape (n, dim)
-            clas: class labels with shape (n, ).
+        This function is just to handle the input mask used in NLP tasks
         """
         net.train() if mode == "train" else net.eval()
         criterion = nn.CrossEntropyLoss(reduction="none")
@@ -412,9 +387,14 @@ class DefenderOPT(nn.Module):
         net.eval()
         total_correct = 0
         total_samples = 0
-        for inputs, targets in eval_loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            outputs = net(inputs)
+        for data in eval_loader:
+            if len(data) == 2:
+                inputs, targets = data
+                outputs = net(inputs.to(device))
+            else:
+                inputs, masks, targets = data
+                outputs = net(inputs.to(device), masks.to(device))
+            targets = targets.to(device)
             _, predicted = torch.max(outputs, dim=1)
             total_correct += predicted.eq(targets).sum().item()
             total_samples += targets.size(0)
@@ -528,27 +508,8 @@ class DefenderOPT(nn.Module):
         ).mean()
         return (MIA_accuracy, MIA_recall, MIA_auc)
 
-    def _compute_1d_wasserstein_distance(
-        self, ft_scores: torch.Tensor, tst_scores: torch.Tensor
-    ):
-        """
-        Compute the 1d Wasserstein distance between the output scalar scores.
-        Parameters:
-            ft_scores/tst_scores: the scores of the data from the forget/test set
-        Returns:
-            dist: 1d wasserstein distance
-        """
-        # _diff_sort_func = lambda x: torchsort.soft_sort(x,
-        #                                                 regularization=self.regular_type,
-        #                                                 regularization_strength=self.regular_strength)
-        # ft_scores.to(self.device), tst_scores.to(self.device)
-        # return torch.mean(torch.abs(
-        #    _diff_sort_func(ft_scores) - _diff_sort_func(tst_scores)
-        #     ))
-        return torch.tensor(0.0, device=self.device)
-
     def _classwise_processing(self, data, targets, forget_classes):
-        ## remove the data from the class to be forgetten
+        ## remove the data from the `forget class`
         data_copy = data.clone()
         targets_copy = targets.clone()
         mask = ~torch.any(targets.unsqueeze(1) == forget_classes.unsqueeze(0), dim=1)
@@ -638,8 +599,7 @@ class DefenderOPT(nn.Module):
             ns, device=self.device
         )
 
-        ## compute 1d wasserstein distance
-        # wasserstein_dist = self._compute_1d_wasserstein_distance(forget_scores, test_scores)
+        ## compute 1d wasserstein distance (DEPRECATED)
         wasserstein_dist = torch.tensor(0.0, device=self.device)
 
         all_members = torch.cat((forget_members, test_members), axis=0).to(
@@ -668,9 +628,6 @@ class DefenderOPT(nn.Module):
         ## aggregate the attacker's likelihood across k-fold cross validation
         total_lik = torch.zeros(1, device=self.device)
         total_acc = torch.zeros(1, device=self.device)
-        ## self.kf = StratifiedShuffleSplit.
-        ## It is important to have a fixed ratio of each class for both training and test data,
-        ## as we need to warm-start the solver.
         for fold, (train_indices, test_indices) in enumerate(
             self.kf.split(all_scores_numpy, all_clas_numpy)
         ):
@@ -688,7 +645,8 @@ class DefenderOPT(nn.Module):
                 all_clas[test_indices],
             )
             if not self.classwise:
-                ## create a separate attacker for each class, as described in https://arxiv.org/abs/1610.05820
+                ## create a separate attacker to differentiate between forget&test instances for each class,
+                ## as described in https://arxiv.org/abs/1610.05820
                 unique_clas = torch.unique(y_clas_tr).detach().to(torch.long)
                 for cl in unique_clas:
                     cls_idx_tr = torch.where(y_clas_tr == cl)
@@ -767,75 +725,6 @@ class DefenderOPT(nn.Module):
             )
             attacker_accuracy = (preds.squeeze() == y_te).sum().item()
         return (attacker_likelihood, attacker_accuracy)
-
-    # def _attacker_likelihood_SVM(self, X_tr, y_tr, X_te, y_te, fold_id, class_id) -> torch.Tensor:
-    #     """
-    #         Formulate the membership inference attack (MIA)
-    #         as a differentiable layer of Logistic Regression (LR)
-    #     """
-    #     n = X_tr.shape[0]
-    #     m = X_tr.shape[1]
-
-    #     if int(torch.__version__[0]) > int(REF_VERSION[0]) or int(torch.__version__.split('.')[1]) >= int(REF_VERSION.split('.')[1]):
-    #         y = 2 * y_tr.numpy(force=True)[:, np.newaxis] - 1
-    #         ## augment the data with a new feature dimension with all ones
-    #         X_hat = np.hstack((X_tr.numpy(force=True), np.ones((n, 1))))
-    #     else:
-    #         y = 2 * y_tr.detach().cpu().numpy()[:, np.newaxis] - 1
-    #         X_hat = np.hstack((X_tr.detach().cpu().numpy(), np.ones((n, 1))))
-
-    #     ## construct a Quadratic Programming (QP) formulation of a linear SVM using matrix notation
-    #     ## matrix P
-    #     epsilon = 1e-8  ## to make the resulting matrix PSD
-    #     block1 = np.eye(n)
-    #     block2 = np.array([[0]]) + epsilon
-    #     block3 = np.zeros((m, m)) + epsilon
-    #     P = torch.from_numpy(
-    #         np.block([
-    #             [block1, np.zeros((n, 1)), np.zeros((n, m))],
-    #             [np.zeros((1, n)), block2, np.zeros((1, m))],
-    #             [np.zeros((m, n)), np.zeros((m, 1)), block3]
-    #         ]).astype(np.float32)
-    #     ).to(self.device)
-
-    #     ## column vector q
-    #     C = 1
-    #     q = torch.from_numpy(
-    #         np.vstack((np.zeros((m + 1, 1)), C * np.ones((n, 1)))).squeeze().astype(np.float32)
-    #     ).to(self.device)
-
-    #     ## matrix G
-    #     upper_block = -np.hstack((np.diag(y)*X_hat, -np.eye(n)))
-    #     lower_block = -np.hstack((np.zeros((n, m+1)), -np.eye(n)))
-    #     G = nn.Parameter(torch.from_numpy(
-    #         np.vstack((upper_block, lower_block)).astype(np.float32)
-    #     ).to(self.device))
-
-    #     ## column vector h
-    #     h = torch.from_numpy(
-    #         np.vstack((-np.ones((n, 1)), np.zeros((n, 1)))).astype(np.float32)
-    #     ).to(self.device)
-
-    #     ## matrix A, and column bector b
-    #     A = torch.Tensor()
-    #     b = torch.Tensor()
-
-    #     w_opt = QPFunction(verbose=True)(P, q, G, h, A, b)
-
-    #     def hinge_loss(output, target):
-    #         # For binary classification with labels +1 and -1
-    #         return torch.clamp(1 - output * (2*target - 1), min=0).sum()
-
-    #     ## the attacker's utility, i.e., the negative of hinge loss
-    #     t = torch.cat((X_te, torch.ones(X_te.shape[0], 1, device=self.device)), dim=1) @ w_opt
-    #     attacker_likelihood = -hinge_loss(t.squeeze(), y_te*1.0)
-
-    #     ## the attacker's accuracy
-    #     with torch.no_grad():
-    #         ## the forget data is labeld as 1
-    #         preds = torch.where(t >= 0, torch.tensor(1, device=self.device), torch.tensor(0, device=self.device))
-    #         attacker_accuracy = (preds.squeeze() == y_te).sum().item()
-    #     return (attacker_likelihood, attacker_accuracy)
 
 
 if __name__ == "__main__":

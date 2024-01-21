@@ -145,19 +145,34 @@ def evaluate_accuracy(model, data_loader, device='cpu'):
     
     # No need to track gradients during evaluation
     with torch.no_grad():
-        for inputs, labels in data_loader:
-            # Move data to the same device as the model if necessary
-            inputs, labels = inputs.to(device), labels.to(device)
-            
-            # Compute model's predictions
-            outputs = model(inputs)
-            
-            # Get the predicted class for each example in the batch
-            _, predicted = torch.max(outputs, 1)
-            
-            # Update total predictions and total correct predictions
-            total_predictions += labels.size(0)
-            total_correct += (predicted == labels).sum().item()
+        try:
+            for inputs, labels in data_loader:
+                # Move data to the same device as the model if necessary
+                inputs, labels = inputs.to(device), labels.to(device)
+
+                # Compute model's predictions
+                outputs = model(inputs)
+
+                # Get the predicted class for each example in the batch
+                _, predicted = torch.max(outputs, 1)
+
+                # Update total predictions and total correct predictions
+                total_predictions += labels.size(0)
+                total_correct += (predicted == labels).sum().item()
+        except ValueError as e:
+            for inputs, masks, labels in data_loader:
+                # Move data to the same device as the model if necessary
+                inputs, masks, labels = inputs.to(device), masks.to(device), labels.to(device)
+
+                # Compute model's predictions
+                outputs = model(inputs, masks)
+
+                # Get the predicted class for each example in the batch
+                _, predicted = torch.max(outputs, 1)
+
+                # Update total predictions and total correct predictions
+                total_predictions += labels.size(0)
+                total_correct += (predicted == labels).sum().item()
     
     # Compute accuracy
     accuracy = total_correct / total_predictions
@@ -188,3 +203,5 @@ class BinaryClassificationDataset(Dataset):
 
     def __getitem__(self, index):
         return self.data[index], self.labels[index]
+
+

@@ -4,12 +4,14 @@ import torch.nn as nn
 from sklearn.svm import LinearSVC
 from sklearn import linear_model, model_selection
 
+import pdb
 
 def simple_mia(model,
                forget_loader, 
                test_loader, 
                n_splits=10, 
                random_state=0,
+               with_masks=False,
                device='cpu'):
     forget_losses = compute_losses(model, forget_loader, device)
     test_losses = compute_losses(model, test_loader, device)
@@ -40,12 +42,21 @@ def compute_losses(net, loader, device):
     criterion = nn.CrossEntropyLoss(reduction="none")
     all_losses = []
 
-    for inputs, targets in loader:
-        inputs, targets = inputs.to(device), targets.to(device)
+    try:
+        for inputs, targets in loader:
+            inputs, targets = inputs.to(device), targets.to(device)
 
-        logits = net(inputs)
-        losses = criterion(logits, targets).detach().cpu().numpy()
-        for l in losses:
-            all_losses.append(l)
+            logits = net(inputs)
+            losses = criterion(logits, targets).detach().cpu().numpy()
+            for l in losses:
+                all_losses.append(l)
+    except ValueError as e:
+        for inputs, masks, targets in loader:
+            inputs, masks, targets = inputs.to(device), masks.to(device), targets.to(device)
+
+            logits = net(inputs, masks)
+            losses = criterion(logits, targets).detach().cpu().numpy()
+            for l in losses:
+                all_losses.append(l)    
 
     return np.array(all_losses)
