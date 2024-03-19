@@ -4,29 +4,26 @@ import sys
 sys.path.append("../src")
 
 import argparse
-import numpy as np
+import pdb
+import warnings
+from collections import Counter
+
 import matplotlib.pyplot as plt
-
+import numpy as np
 import torch
-from torch.utils.data import DataLoader
-
-import torchvision
-from torchvision import transforms
-
-from utils import random_split
-from models import DefenderOPT
-
 import torch.nn as nn
+import torch.utils.data as Data
+import torchvision
+from torch.utils.data import DataLoader
+from torchvision import transforms
 
 # from resnet import resnet18
 from torchvision.models import resnet18
-
-import pdb
-import warnings
-import utils_20ng
 from transformers import AutoModel, AutoTokenizer
-import torch.utils.data as Data
-from collections import Counter
+
+import utils_20ng
+from models import DefenderOPT
+from utils import random_split
 
 warnings.simplefilter(action="ignore", category=Warning)
 

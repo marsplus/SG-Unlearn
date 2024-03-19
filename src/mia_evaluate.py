@@ -1,18 +1,21 @@
-import torch
-import numpy as np
-import torch.nn as nn
-from sklearn.svm import LinearSVC
-from sklearn import linear_model, model_selection
-
 import pdb
 
-def simple_mia(model,
-               forget_loader, 
-               test_loader, 
-               n_splits=10, 
-               random_state=0,
-               with_masks=False,
-               device='cpu'):
+import numpy as np
+import torch
+import torch.nn as nn
+from sklearn import linear_model, model_selection
+from sklearn.svm import LinearSVC
+
+
+def simple_mia(
+    model,
+    forget_loader,
+    test_loader,
+    n_splits=10,
+    random_state=0,
+    with_masks=False,
+    device="cpu",
+):
     forget_losses = compute_losses(model, forget_loader, device)
     test_losses = compute_losses(model, test_loader, device)
     ## ensure a balanced dataset
@@ -30,9 +33,15 @@ def simple_mia(model,
     cv = model_selection.StratifiedShuffleSplit(
         n_splits=n_splits, random_state=random_state
     )
-    acc = model_selection.cross_val_score(attack_model, sample_loss, members, cv=cv, scoring="accuracy").mean()
-    auc = model_selection.cross_val_score(attack_model, sample_loss, members, cv=cv, scoring="roc_auc").mean()
-    f1 = model_selection.cross_val_score(attack_model, sample_loss, members, cv=cv, scoring="f1").mean()
+    acc = model_selection.cross_val_score(
+        attack_model, sample_loss, members, cv=cv, scoring="accuracy"
+    ).mean()
+    auc = model_selection.cross_val_score(
+        attack_model, sample_loss, members, cv=cv, scoring="roc_auc"
+    ).mean()
+    f1 = model_selection.cross_val_score(
+        attack_model, sample_loss, members, cv=cv, scoring="f1"
+    ).mean()
     return (acc, auc, f1, forget_losses, test_losses)
 
 
@@ -52,11 +61,15 @@ def compute_losses(net, loader, device):
                 all_losses.append(l)
     except ValueError as e:
         for inputs, masks, targets in loader:
-            inputs, masks, targets = inputs.to(device), masks.to(device), targets.to(device)
+            inputs, masks, targets = (
+                inputs.to(device),
+                masks.to(device),
+                targets.to(device),
+            )
 
             logits = net(inputs, masks)
             losses = criterion(logits, targets).detach().cpu().numpy()
             for l in losses:
-                all_losses.append(l)    
+                all_losses.append(l)
 
     return np.array(all_losses)

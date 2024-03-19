@@ -1,31 +1,31 @@
+import logging
 import os
+import pdb
+import pickle
 import sys
 import time
-import torch
-import pickle
-import logging
+
+import cvxpy as cp
 import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from cvxpylayers.torch import CvxpyLayer
+from memory_profiler import profile
+from sklearn.model_selection import (
+    StratifiedKFold,
+    StratifiedShuffleSplit,
+    cross_val_score,
+)
+from sklearn.svm import LinearSVC
 from torch.utils.data import DataLoader
+
+from evaluate import evaluate_model
+from utils import BinaryClassificationDataset, wasserstein_distance_1d
 
 # from qpth.qp import QPFunction
 
-from utils import BinaryClassificationDataset, wasserstein_distance_1d
-from sklearn.svm import LinearSVC
-from sklearn.model_selection import (
-    StratifiedShuffleSplit,
-    cross_val_score,
-    StratifiedKFold,
-)
-
-import cvxpy as cp
-from cvxpylayers.torch import CvxpyLayer
-
-import pdb
-from memory_profiler import profile
-from evaluate import evaluate_model
 
 # self.device = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_ATTACKER = 0
@@ -299,9 +299,11 @@ class DefenderOPT(nn.Module):
                 f"test accuracy: {test_accuracy:.4f}, ",
                 f"forget accuracy: {forget_accuracy:.4f}, ",
                 f"retain accuracy: {retain_accuracy:.4f}, ",
-                f"att accuracy: {att_acc.item():.4f}, "
-                if self.with_attacker
-                else f"att accuracy: None, ",
+                (
+                    f"att accuracy: {att_acc.item():.4f}, "
+                    if self.with_attacker
+                    else f"att accuracy: None, "
+                ),
                 f"MIA accuracy: {MIA_accuracy.item():.4f}, ",
                 f"MIA auc: {MIA_auc.item():.4f}, ",
                 f"MIA recall: {MIA_recall.item():.4f}, ",

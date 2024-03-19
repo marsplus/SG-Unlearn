@@ -1,17 +1,19 @@
-from .GA import GA,GA_l1
-from .FT import FT,FT_l1
-from .fisher import fisher,fisher_new
-from .retrain import retrain
-from .impl import load_unlearn_checkpoint, save_unlearn_checkpoint
-from .Wfisher import Wfisher
+from .fisher import fisher, fisher_new
+from .FT import FT, FT_l1
 from .FT_prune import FT_prune
 from .FT_prune_bi import FT_prune_bi
+from .GA import GA, GA_l1
+from .impl import load_unlearn_checkpoint, save_unlearn_checkpoint
+from .retrain import retrain
+from .Wfisher import Wfisher
+
+
 def raw(data_loaders, model, criterion, args):
     pass
 
 
 def get_unlearn_method(name):
-    """ method usage:
+    """method usage:
 
     function(data_loaders, model, criterion, args)"""
     if name == "raw":
@@ -26,7 +28,7 @@ def get_unlearn_method(name):
         return fisher
     elif name == "retrain":
         return retrain
-    elif name== "fisher_new":
+    elif name == "fisher_new":
         return fisher_new
     elif name == "wfisher":
         return Wfisher

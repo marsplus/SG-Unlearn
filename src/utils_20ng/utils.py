@@ -1,10 +1,11 @@
-import numpy as np
 import pickle as pkl
+import re
+import sys
+
 import networkx as nx
+import numpy as np
 import scipy.sparse as sp
 from scipy.sparse.linalg import eigsh
-import sys
-import re
 
 
 def parse_index_file(filename):

@@ -1,18 +1,17 @@
 import math
-import torch
-import numpy as np
+import warnings
+from typing import List
 
+import numpy as np
+import torch
 import torch.nn as nn
+from sklearn import linear_model, model_selection
+from sklearn.datasets import make_blobs
 from torch import default_generator, randperm
 from torch._utils import _accumulate
-from torch.utils.data.dataset import Subset
 from torch.utils.data import Dataset
+from torch.utils.data.dataset import Subset
 
-from typing import List
-import warnings
-
-from sklearn.datasets import make_blobs
-from sklearn import linear_model, model_selection
 
 def wasserstein_distance_1d(dist1, dist2):
     dist1_sorted = sorted(dist1)
@@ -20,8 +19,7 @@ def wasserstein_distance_1d(dist1, dist2):
     return np.mean(np.abs(np.array(dist1_sorted) - np.array(dist2_sorted)))
 
 
-def random_split(dataset, lengths,
-                 generator=default_generator):
+def random_split(dataset, lengths, generator=default_generator):
     r"""
     Randomly split a dataset into non-overlapping new datasets of given lengths.
 
@@ -61,15 +59,22 @@ def random_split(dataset, lengths,
         lengths = subset_lengths
         for i, length in enumerate(lengths):
             if length == 0:
-                warnings.warn(f"Length of split at index {i} is 0. "
-                              f"This might result in an empty dataset.")
+                warnings.warn(
+                    f"Length of split at index {i} is 0. "
+                    f"This might result in an empty dataset."
+                )
 
     # Cannot verify that dataset is Sized
-    if sum(lengths) != len(dataset):    # type: ignore[arg-type]
-        raise ValueError("Sum of input lengths does not equal the length of the input dataset!")
+    if sum(lengths) != len(dataset):  # type: ignore[arg-type]
+        raise ValueError(
+            "Sum of input lengths does not equal the length of the input dataset!"
+        )
 
     indices = randperm(sum(lengths), generator=generator).tolist()  # type: ignore[call-overload]
-    return [Subset(dataset, indices[offset - length : offset]) for offset, length in zip(_accumulate(lengths), lengths)]
+    return [
+        Subset(dataset, indices[offset - length : offset])
+        for offset, length in zip(_accumulate(lengths), lengths)
+    ]
 
 
 def print_parms(model):
@@ -102,8 +107,12 @@ def simple_mia(sample_loss, members, n_splits=10, random_state=0):
     cv = model_selection.StratifiedShuffleSplit(
         n_splits=n_splits, random_state=random_state
     )
-    acc = model_selection.cross_val_score(attack_model, sample_loss, members, cv=cv, scoring="accuracy").mean()
-    auc = model_selection.cross_val_score(attack_model, sample_loss, members, cv=cv, scoring="roc_auc").mean()
+    acc = model_selection.cross_val_score(
+        attack_model, sample_loss, members, cv=cv, scoring="accuracy"
+    ).mean()
+    auc = model_selection.cross_val_score(
+        attack_model, sample_loss, members, cv=cv, scoring="roc_auc"
+    ).mean()
     return (acc, auc)
 
 
@@ -124,7 +133,7 @@ def compute_losses(net, loader, device):
     return np.array(all_losses)
 
 
-def evaluate_accuracy(model, data_loader, device='cpu'):
+def evaluate_accuracy(model, data_loader, device="cpu"):
     """
     Evaluate the accuracy of a PyTorch model using a DataLoader.
 
@@ -135,14 +144,14 @@ def evaluate_accuracy(model, data_loader, device='cpu'):
     Returns:
     - Accuracy of the model on the dataset.
     """
-    
+
     # Ensure the model is in evaluation mode
     model.eval()
-    
+
     # Variables to store total correct predictions and total predictions
     total_correct = 0
     total_predictions = 0
-    
+
     # No need to track gradients during evaluation
     with torch.no_grad():
         try:
@@ -162,7 +171,11 @@ def evaluate_accuracy(model, data_loader, device='cpu'):
         except ValueError as e:
             for inputs, masks, labels in data_loader:
                 # Move data to the same device as the model if necessary
-                inputs, masks, labels = inputs.to(device), masks.to(device), labels.to(device)
+                inputs, masks, labels = (
+                    inputs.to(device),
+                    masks.to(device),
+                    labels.to(device),
+                )
 
                 # Compute model's predictions
                 outputs = model(inputs, masks)
@@ -173,11 +186,10 @@ def evaluate_accuracy(model, data_loader, device='cpu'):
                 # Update total predictions and total correct predictions
                 total_predictions += labels.size(0)
                 total_correct += (predicted == labels).sum().item()
-    
+
     # Compute accuracy
     accuracy = total_correct / total_predictions
     return accuracy
-
 
 
 # Define a custom dataset class
@@ -188,14 +200,22 @@ class BinaryClassificationDataset(Dataset):
         self.num_features = num_features
         self.data, self.labels = self.generate_data()
 
-    def generate_data(self, std: float = 3.):
+    def generate_data(self, std: float = 3.0):
         ## generate two Gaussian distributed clusters
-        X, y = make_blobs(self.num_samples, 
-                          self.num_features, 
-                          centers=np.array([2*np.ones(self.num_features), -2*np.ones(self.num_features)]), 
-                          cluster_std=std)
+        X, y = make_blobs(
+            self.num_samples,
+            self.num_features,
+            centers=np.array(
+                [2 * np.ones(self.num_features), -2 * np.ones(self.num_features)]
+            ),
+            cluster_std=std,
+        )
         ## to avoid latter float64 v.s. float32 issues
-        _func = lambda x: torch.from_numpy(x).float() if x.dtype != int else torch.from_numpy(x).long()
+        _func = lambda x: (
+            torch.from_numpy(x).float()
+            if x.dtype != int
+            else torch.from_numpy(x).long()
+        )
         return map(_func, [X, y])
 
     def __len__(self):
@@ -203,5 +223,3 @@ class BinaryClassificationDataset(Dataset):
 
     def __getitem__(self, index):
         return self.data[index], self.labels[index]
-
-
