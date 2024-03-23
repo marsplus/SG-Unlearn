@@ -21,7 +21,7 @@ fi
 
 for seed in {1..10}
 do
-	python cifar.py
+	python main.py
 	--device_id=${device_id} \
 	--num_epoch=$ne \
 	--cv=$cv \

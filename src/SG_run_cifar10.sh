@@ -11,7 +11,7 @@ counter=0
 dev_id=0
 for seed in {1..10}
 do    
-    python cifar.py --device_id=$dev_id --num_epoch=$nepoch --cv=$cv --dim=$d --output_dir=${output_dir} --seed=$seed  --save_checkpoint=1 
+    python main.py --device_id=$dev_id --num_epoch=$nepoch --cv=$cv --dim=$d --output_dir=${output_dir} --seed=$seed  --save_checkpoint=1 
     
 #     counter=$((counter+1))
     
