@@ -12,6 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from cvxpylayers.torch import CvxpyLayer
+from evaluate import evaluate_model
+
 # from memory_profiler import profile
 from sklearn.model_selection import (
     StratifiedKFold,
@@ -20,8 +22,6 @@ from sklearn.model_selection import (
 )
 from sklearn.svm import LinearSVC
 from torch.utils.data import DataLoader
-
-from evaluate import evaluate_model
 from utils import BinaryClassificationDataset, wasserstein_distance_1d
 
 # from qpth.qp import QPFunction
@@ -437,9 +437,10 @@ class DefenderOPT(nn.Module):
                 test_scores = DefenderOPT._generate_scores(
                     net, test_data, test_targets, mode="eval", dim=dim, device=device
                 )  # the naming is a bit bad here :(
-                forget_members, test_members = torch.ones(
-                    ns, device=device
-                ), torch.zeros(ns, device=device)
+                forget_members, test_members = (
+                    torch.ones(ns, device=device),
+                    torch.zeros(ns, device=device),
+                )
                 all_scores.append(
                     torch.cat((forget_scores[:ns], test_scores[:ns]), axis=0)
                 )  # shape=(ns, dim)
@@ -471,9 +472,10 @@ class DefenderOPT(nn.Module):
                     dim=dim,
                     device=device,
                 )  # the naming is a bit bad here :(
-                forget_members, test_members = torch.ones(
-                    ns, device=device
-                ), torch.zeros(ns, device=device)
+                forget_members, test_members = (
+                    torch.ones(ns, device=device),
+                    torch.zeros(ns, device=device),
+                )
                 all_scores.append(
                     torch.cat((forget_scores[:ns], test_scores[:ns]), axis=0)
                 )  # shape=(ns, dim)
@@ -597,8 +599,9 @@ class DefenderOPT(nn.Module):
         all_clas = torch.cat((forget_targets[:ns], test_targets[:ns]), axis=0).to(
             torch.long
         )  # shape=(ns, )
-        forget_members, test_members = torch.ones(ns, device=self.device), torch.zeros(
-            ns, device=self.device
+        forget_members, test_members = (
+            torch.ones(ns, device=self.device),
+            torch.zeros(ns, device=self.device),
         )
 
         ## compute 1d wasserstein distance (DEPRECATED)
@@ -613,8 +616,10 @@ class DefenderOPT(nn.Module):
         all_scores = all_scores[idx]
         all_members = all_members[idx]
         all_clas = all_clas[idx]
-        all_scores.to(self.device), all_members.to(self.device), all_clas.to(
-            self.device
+        (
+            all_scores.to(self.device),
+            all_members.to(self.device),
+            all_clas.to(self.device),
         )
 
         ## below is just to handle platform issues
@@ -691,7 +696,7 @@ class DefenderOPT(nn.Module):
         n_sample = X_tr.shape[0]
         n_feature = X_tr.shape[1]
 
-        ## define the optimization of logistic regression in cvxpy
+        ## define the optimization problem of SVM in cvxpy
         beta = cp.Variable((n_feature, 1))
         b = cp.Variable()
         data = cp.Parameter((n_sample, n_feature))
