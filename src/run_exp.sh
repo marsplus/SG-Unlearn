@@ -17,7 +17,7 @@ do
 for seed in {1..10}
 do
 
-python cifar.py \
+python main.py \
 	--device_id=$1 \
 	--num_epoch=$ne \
 	--cv=$cv \

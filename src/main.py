@@ -14,16 +14,16 @@ import torch
 import torch.nn as nn
 import torch.utils.data as Data
 import torchvision
+import utils_20ng
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
 # from resnet import resnet18
 from torchvision.models import resnet18
 from transformers import AutoModel, AutoTokenizer
-
-import utils_20ng
-from models import DefenderOPT
 from utils import random_split
+
+from models import DefenderOPT
 
 warnings.simplefilter(action="ignore", category=Warning)
 
