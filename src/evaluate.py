@@ -109,7 +109,7 @@ def FT_hyperparam_search(args):
         # for lr in ['0.0000001', '0.000001', '0.00001']:   ## for 20 Newsgroups
         for ep in [5, 10, 15]:
             folder_path = os.path.join(
-                args.baseline_path, f"FT/{args.dataset}/lr_{lr}_nepoch_{ep}"
+                args.checkpoint_path, f"FT/{args.dataset}/lr_{lr}_nepoch_{ep}"
             )
             path_to_ckpts = [
                 os.path.join(folder_path, f)
@@ -135,20 +135,20 @@ def GA_hyperparam_search(args):
         # for lr in ['0.0000001', '0.00000001', '0.000001', '0.00001', '0.0001', '0.001']:   ## for 20 Newsgroups
         for ep in [5, 10, 15]:
             # if lr == '0.000001':
-            #     folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.000001_nepoch_{ep}')
+            #     folder_path = os.path.join(args.checkpoint_path, f'GA/{args.dataset}/lr_0.000001_nepoch_{ep}')
             # elif lr == '0.00001':
-            #     folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.00001_nepoch_{ep}')
+            #     folder_path = os.path.join(args.checkpoint_path, f'GA/{args.dataset}/lr_0.00001_nepoch_{ep}')
             # elif lr == '0.0001':
-            #     folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.0001_nepoch_{ep}')
+            #     folder_path = os.path.join(args.checkpoint_path, f'GA/{args.dataset}/lr_0.0001_nepoch_{ep}')
             # elif lr == '0.0000001':
-            #     folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.0000001_nepoch_{ep}')
+            #     folder_path = os.path.join(args.checkpoint_path, f'GA/{args.dataset}/lr_0.0000001_nepoch_{ep}')
             # elif lr == '0.00000001':
-            #     folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.00000001_nepoch_{ep}')
+            #     folder_path = os.path.join(args.checkpoint_path, f'GA/{args.dataset}/lr_0.00000001_nepoch_{ep}')
             # else:
-            #     folder_path = os.path.join(args.baseline_path, f'GA/{args.dataset}/lr_0.001_nepoch_{ep}')
+            #     folder_path = os.path.join(args.checkpoint_path, f'GA/{args.dataset}/lr_0.001_nepoch_{ep}')
 
             folder_path = os.path.join(
-                args.baseline_path, f"GA/{args.dataset}/lr_{lr}_nepoch_{ep}"
+                args.checkpoint_path, f"GA/{args.dataset}/lr_{lr}_nepoch_{ep}"
             )
             path_to_ckpts = [
                 os.path.join(folder_path, f)
@@ -173,23 +173,23 @@ def fisher_hyperparam_search(args):
     for alpha in [1e-9, 1e-8, 1e-7, 1e-6, 1e-5]:
         if alpha == 1e-9:
             folder_path = os.path.join(
-                args.baseline_path, f"{args.baseline}/{args.dataset}/alpha_1e-9"
+                args.checkpoint_path, f"{args.method}/{args.dataset}/alpha_1e-9"
             )
         elif alpha == 1e-8:
             folder_path = os.path.join(
-                args.baseline_path, f"{args.baseline}/{args.dataset}/alpha_1e-8"
+                args.checkpoint_path, f"{args.method}/{args.dataset}/alpha_1e-8"
             )
         elif alpha == 1e-7:
             folder_path = os.path.join(
-                args.baseline_path, f"{args.baseline}/{args.dataset}/alpha_1e-7"
+                args.checkpoint_path, f"{args.method}/{args.dataset}/alpha_1e-7"
             )
         elif alpha == 1e-6:
             folder_path = os.path.join(
-                args.baseline_path, f"{args.baseline}/{args.dataset}/alpha_1e-6"
+                args.checkpoint_path, f"{args.method}/{args.dataset}/alpha_1e-6"
             )
         elif alpha == 1e-5:
             folder_path = os.path.join(
-                args.baseline_path, f"{args.baseline}/{args.dataset}/alpha_1e-5"
+                args.checkpoint_path, f"{args.method}/{args.dataset}/alpha_1e-5"
             )
         path_to_ckpts = [
             os.path.join(folder_path, f)
@@ -213,11 +213,11 @@ def retrain_hyperparam_search(args):
     best_param = (None, None)
     if args.dataset == "svhn":
         folder_path = os.path.join(
-            args.baseline_path, f"retrain/{args.dataset}/lr_0.1_nepoch_100"
+            args.checkpoint_path, f"retrain/{args.dataset}/lr_0.1_nepoch_100"
         )
     else:
         folder_path = os.path.join(
-            args.baseline_path, f"retrain/{args.dataset}/lr_0.1_nepoch_200"
+            args.checkpoint_path, f"retrain/{args.dataset}/lr_0.1_nepoch_200"
         )
     path_to_ckpts = [
         os.path.join(folder_path, f)
@@ -250,7 +250,7 @@ def SG_hyperparam_search(args):
     for ep in [5, 10, 15, 20, 25, 30]:
         path_to_ckpts = glob.glob(
             os.path.join(
-                args.baseline_path,
+                args.checkpoint_path,
                 f"{args.dataset}/eval_num_epoch_{ep}_cv_3_dim_{dim}_atts_1.0_seed_*.pth",
             )
         )
@@ -261,10 +261,10 @@ def SG_hyperparam_search(args):
             best_metric = eval_metric
             best = ret
             best_param = ep
-    print(best_param)
+    print("Best epoch: ", best_param)
     return best
     # dim = 100 if args.dataset == 'cifar100' else 10
-    # path_to_ckpts = glob.glob(os.path.join(args.baseline_path, f'{args.dataset}/eval_num_epoch_{args.num_epoch}_cv_3_dim_{dim}_atts_{args.attacker_strength}_seed_*_{args.dataset}.pth'))
+    # path_to_ckpts = glob.glob(os.path.join(args.checkpoint_path, f'{args.dataset}/eval_num_epoch_{args.num_epoch}_cv_3_dim_{dim}_atts_{args.attacker_strength}_seed_*_{args.dataset}.pth'))
     # n = len(path_to_ckpts)
     # ret = defaultdict(float)
     # for f in path_to_ckpts:
@@ -277,22 +277,22 @@ def SG_hyperparam_search(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, default="cifar10")
-    parser.add_argument("--baseline_path", type=str, default=".")
-    parser.add_argument("--baseline", type=str, default="FT")
+    parser.add_argument("--checkpoint_path", type=str, default=".")
+    parser.add_argument("--method", type=str, default="FT")
     parser.add_argument("--num_epoch", type=int, default=5)
     parser.add_argument("--attacker_strength", type=int, default=1)
     parser.add_argument("--device_id", type=int, default=0)
     args = parser.parse_args()
 
-    if args.baseline == "FT":
+    if args.method == "FT":
         best_ret = FT_hyperparam_search(args)
-    elif args.baseline == "GA":
+    elif args.method == "GA":
         best_ret = GA_hyperparam_search(args)
-    elif args.baseline in ["wfisher", "fisher_new"]:
+    elif args.method in ["wfisher", "fisher_new"]:
         best_ret = fisher_hyperparam_search(args)
-    elif args.baseline == "retrain":
+    elif args.method == "retrain":
         best_ret = retrain_hyperparam_search(args)
-    elif args.baseline == "SG":
+    elif args.method == "SG":
         best_ret = SG_hyperparam_search(args)
 
     # best_ret['time'] /= 60.0
