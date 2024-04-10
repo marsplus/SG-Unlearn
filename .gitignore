@@ -4,3 +4,4 @@ __pycache__
 *.pth
 *.tar
 *.p
+.vscode/*
