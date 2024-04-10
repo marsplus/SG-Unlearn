@@ -8,33 +8,17 @@
             "name": "SG_cifar10",
             "type": "debugpy",
             "request": "launch",
-            "program": "/code/SG-Unlearn/src/cifar.py",
+            "program": "/code/SG-Unlearn/src/main.py",
             "console": "integratedTerminal",
+            "cwd": "/code/SG-Unlearn/src",
             "args": [
                 "--device_id", "0",
-                "--num_epoch", "20",
+                "--num_epoch", "30",
                 "--cv", "3",
-                "--dim", "10",
-                "--output_dir", "../result/adv_mini_batch/cifar10",
-                "--seed", "1",
-                "--dataset", "cifar10",
-                "--save_checkpoint", "1"
-            ]
-        },
-        {
-            "name": "SG_cifar100",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "/code/SG-Unlearn/src/cifar.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--device_id", "0",
-                "--num_epoch", "20",
-                "--cv", "3",
-                "--dim", "100",
-                "--output_dir", "../result/adv_mini_batch/cifar100",
-                "--seed", "1",
-                "--dataset", "cifar100",
+                "--dim", "11",
+                "--output_dir", "../result/SG_data",
+                "--seed", "3",
+                // "--dataset", "cifar10",
                 "--save_checkpoint", "1"
             ]
         },
