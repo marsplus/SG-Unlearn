@@ -18,6 +18,7 @@ do
         python main.py \
             --device_id=$1 \
             --num_epoch=$ne \
+            --num_class=100 \
             --cv=$cv \
             --dim=$d \
             --output_dir=$output_dir \
