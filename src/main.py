@@ -272,19 +272,19 @@ def main(args):
     ## the unlearned model
     if args.arch == "resnet18":
         if args.dataset == "cifar10":
-            # local_path = (
-            #     args.model_path
-            #     if args.model_path
-            #     else os.path.join(ROOT_DIR, "../models/cifar10_resnet18_ckpt.pth")
-            # )
-            local_path = '/code/Unlearn-Bench/examples/results/CIFAR10/ResNet18/EmpiricalRiskMinimization/pretrain/name_vanilla_train_seed_2/pretrain_checkpoint.pt'
+            local_path = (
+                args.model_path
+                if args.model_path
+                else os.path.join(ROOT_DIR, "../models/pretrain_checkpoint_cifar10.pt")
+            )
+            # local_path = '/code/Unlearn-Bench/examples/results/CIFAR10/ResNet18/EmpiricalRiskMinimization/pretrain/name_vanilla_train_seed_2/pretrain_checkpoint.pt'
         elif args.dataset == "cifar100":
-            # local_path = (
-            #     args.model_path
-            #     if args.model_path
-            #     else os.path.join(ROOT_DIR, "../models/resnet18-200-regular.pth")
-            # )
-            local_path = '/code/Unlearn-Bench/examples/results/CIFAR100/ResNet18/EmpiricalRiskMinimization/pretrain/name_vanilla_train_seed_2/pretrain_checkpoint.pt'
+            local_path = (
+                args.model_path
+                if args.model_path
+                else os.path.join(ROOT_DIR, "../models/pretrain_checkpoint_cifar100.pt")
+            )
+            # local_path = '/code/Unlearn-Bench/examples/results/CIFAR100/ResNet18/EmpiricalRiskMinimization/pretrain/name_vanilla_train_seed_2/pretrain_checkpoint.pt'
         elif args.dataset == "svhn":
             local_path = (
                 args.model_path
