@@ -19,7 +19,8 @@
                 "--output_dir", "../result/SG_data",
                 "--seed", "3",
                 // "--dataset", "cifar10",
-                "--save_checkpoint", "1"
+                "--save_checkpoint", "1",
+                "--baseline_mode", "1"
             ]
         },
     ]

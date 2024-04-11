@@ -39,6 +39,7 @@ def simple_mia(
     auc = model_selection.cross_val_score(
         attack_model, sample_loss, members, cv=cv, scoring="roc_auc"
     ).mean()
+    # calculate fpr, fnr using scikit -> two vectors -> fnr 10% -> fpr?
     f1 = model_selection.cross_val_score(
         attack_model, sample_loss, members, cv=cv, scoring="f1"
     ).mean()

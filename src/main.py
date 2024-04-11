@@ -18,8 +18,8 @@ import utils_20ng
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-# from resnet import resnet18
-from torchvision.models import resnet18
+from resnet import resnet18
+# from torchvision.models import resnet18
 from transformers import AutoModel, AutoTokenizer
 from utils import random_split
 
@@ -55,9 +55,9 @@ def main(args):
         transform = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.Normalize(
-                    (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
-                ),
+                # transforms.Normalize(
+                #     (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                # ),
             ]
         )
     elif args.dataset == "cifar100":
@@ -74,14 +74,14 @@ def main(args):
         transform_train = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.Normalize(CIFAR100_TRAIN_MEAN, CIFAR100_TRAIN_STD),
+                # transforms.Normalize(CIFAR100_TRAIN_MEAN, CIFAR100_TRAIN_STD),
             ]
         )
 
         transform_test = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.Normalize(CIFAR100_TRAIN_MEAN, CIFAR100_TRAIN_STD),
+                # transforms.Normalize(CIFAR100_TRAIN_MEAN, CIFAR100_TRAIN_STD),
             ]
         )
     elif args.dataset == "svhn":
@@ -272,17 +272,19 @@ def main(args):
     ## the unlearned model
     if args.arch == "resnet18":
         if args.dataset == "cifar10":
-            local_path = (
-                args.model_path
-                if args.model_path
-                else os.path.join(ROOT_DIR, "../models/cifar10_resnet18_ckpt.pth")
-            )
+            # local_path = (
+            #     args.model_path
+            #     if args.model_path
+            #     else os.path.join(ROOT_DIR, "../models/cifar10_resnet18_ckpt.pth")
+            # )
+            local_path = '/code/Unlearn-Bench/examples/results/CIFAR10/ResNet18/EmpiricalRiskMinimization/pretrain/name_vanilla_train_seed_2/pretrain_checkpoint.pt'
         elif args.dataset == "cifar100":
-            local_path = (
-                args.model_path
-                if args.model_path
-                else os.path.join(ROOT_DIR, "../models/resnet18-200-regular.pth")
-            )
+            # local_path = (
+            #     args.model_path
+            #     if args.model_path
+            #     else os.path.join(ROOT_DIR, "../models/resnet18-200-regular.pth")
+            # )
+            local_path = '/code/Unlearn-Bench/examples/results/CIFAR100/ResNet18/EmpiricalRiskMinimization/pretrain/name_vanilla_train_seed_2/pretrain_checkpoint.pt'
         elif args.dataset == "svhn":
             local_path = (
                 args.model_path
@@ -300,10 +302,10 @@ def main(args):
 
     if args.dataset != "20ng":
         weights_pretrained = torch.load(local_path, map_location=DEVICE)
-        # from resnet import resnet18
+        from resnet import resnet18
         model_ft = resnet18(num_classes=args.num_class)
         ## change the first conv layer for smaller images
-        model_ft.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1, bias=False)
+        # model_ft.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1, bias=False)
         model_ft.load_state_dict(weights_pretrained)
         model_ft.to(DEVICE)
     else:
