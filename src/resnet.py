@@ -12,67 +12,6 @@ import torch
 import torch.nn as nn
 
 
-class NormalizeByChannelMeanStd(nn.Module):
-    """Normalization layer for input tensor using channel-wise mean and std.
-
-    Attributes:
-        mean (torch.Tensor): Mean values.
-        std (torch.Tensor): Std values.
-    """
-
-    def __init__(self, mean, std):
-        """Initialize with channel-wise mean and std.
-
-        Args:
-            mean (list, torch.Tensor): Mean values.
-            std (list, torch.Tensor): Std values.
-        """
-
-        super(NormalizeByChannelMeanStd, self).__init__()
-        if not isinstance(mean, torch.Tensor):
-            mean = torch.tensor(mean)
-        if not isinstance(std, torch.Tensor):
-            std = torch.tensor(std)
-        mean = mean.view(1, -1, 1, 1)
-        std = std.view(1, -1, 1, 1)
-        self.register_buffer("mean", mean)
-        self.register_buffer("std", std)
-
-    def forward(self, tensor):
-        """Apply normalization to the input tensor.
-
-        Args:
-            tensor (torch.Tensor): Input tensor to normalize.
-
-        Returns:
-            torch.Tensor: Normalized tensor.
-        """
-
-        return self.normalize_fn(tensor, self.mean, self.std)
-
-    def extra_repr(self):
-        """Extra representation for debugging.
-
-        Returns:
-            str: Extra information about mean and std.
-        """
-
-        return "mean={}, std={}".format(self.mean, self.std)
-
-    def normalize_fn(self, tensor, mean, std):
-        """Differentiable version of torchvision.functional.normalize
-
-        Args:
-            tensor (torch.Tensor): Input tensor.
-            mean (torch.Tensor): Mean tensor.
-            std (torch.Tensor): Std tensor.
-
-        Returns:
-            torch.Tensor: Normalized tensor.
-        """
-        return torch.sub(tensor, mean).div(std)
-
-
 def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
     """Create a 3x3 convolution layer with padding.
 
