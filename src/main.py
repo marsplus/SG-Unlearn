@@ -275,13 +275,13 @@ def main(args):
             local_path = (
                 args.model_path
                 if args.model_path
-                else os.path.join(ROOT_DIR, "../models/cifar10_resnet18_ckpt.pth")
+                else os.path.join(ROOT_DIR, "../models/cifar10_resnet18_ckpt_93_no_pooling.pt")
             )
         elif args.dataset == "cifar100":
             local_path = (
                 args.model_path
                 if args.model_path
-                else os.path.join(ROOT_DIR, "../models/resnet18-200-regular.pth")
+                else os.path.join(ROOT_DIR, "../models/cifar100_resnet18_ckpt_71_no_pooling.pt")
             )
         elif args.dataset == "svhn":
             local_path = (
