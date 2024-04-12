@@ -32,6 +32,6 @@ do
             --save_checkpoint=1 \
             --attacker_strength=$atts \
             --mem_save=10 \
-            --baseline_mode=0
+            --baseline_mode=1
     done
 done

@@ -9,7 +9,6 @@ import pdb
 import warnings
 from collections import defaultdict
 
-import mia_evaluate
 import numpy as np
 import torch
 import torch.nn as nn
@@ -17,6 +16,8 @@ import torchvision
 from scipy.stats import ks_2samp
 from torch.utils.data import DataLoader
 from torchvision.models import resnet18
+
+import mia_evaluate
 from utils import evaluate_accuracy, wasserstein_distance_1d
 
 warnings.simplefilter(action="ignore", category=Warning)

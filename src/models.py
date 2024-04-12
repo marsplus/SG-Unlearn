@@ -12,7 +12,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from cvxpylayers.torch import CvxpyLayer
-from evaluate import evaluate_model
 
 # from memory_profiler import profile
 from sklearn.model_selection import (
@@ -22,6 +21,8 @@ from sklearn.model_selection import (
 )
 from sklearn.svm import LinearSVC
 from torch.utils.data import DataLoader
+
+from evaluate import evaluate_model
 from utils import BinaryClassificationDataset, wasserstein_distance_1d
 
 # from qpth.qp import QPFunction

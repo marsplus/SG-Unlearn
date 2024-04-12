@@ -291,7 +291,7 @@ class Bottleneck(nn.Module):
         out = self.relu(out)
 
         return out
-    
+
 
 class ResNet(nn.Module):
     """ResNet model for image classification.
@@ -353,9 +353,9 @@ class ResNet(nn.Module):
         self.groups = groups
         self.base_width = width_per_group
 
-        self.normalization = NormalizeByChannelMeanStd(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616]
-        )
+        # self.normalization = NormalizeByChannelMeanStd(
+        #     mean=[0.4914, 0.4822, 0.4465], std=[0.2470, 0.2435, 0.2616]
+        # )
 
         if not imagenet:
             self.conv1 = nn.Conv2d(
@@ -456,7 +456,7 @@ class ResNet(nn.Module):
             torch.Tensor: Output tensor after passing through the network.
         """
 
-        x = self.normalization(x)
+        # x = self.normalization(x)
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)

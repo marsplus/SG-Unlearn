@@ -14,16 +14,16 @@ import torch
 import torch.nn as nn
 import torch.utils.data as Data
 import torchvision
-import utils_20ng
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from resnet import resnet18
 # from torchvision.models import resnet18
 from transformers import AutoModel, AutoTokenizer
-from utils import random_split
 
+import utils_20ng
 from models import DefenderOPT
+from resnet import resnet18
+from utils import random_split
 
 warnings.simplefilter(action="ignore", category=Warning)
 
@@ -50,14 +50,24 @@ class BertClassifier(torch.nn.Module):
 def main(args):
     num_workers = 4
     DEVICE = f"cuda:{args.device_id}" if torch.cuda.is_available() else "cpu"
-    ## download and pre-process CIFAR10
+    # download and pre-process CIFAR10
     if args.dataset == "cifar10":
-        transform = transforms.Compose(
+        transform_train = transforms.Compose(
+            [
+                transforms.RandomCrop(32, padding=4),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                ),
+            ]
+        )
+        transform_test = transforms.Compose(
             [
                 transforms.ToTensor(),
-                # transforms.Normalize(
-                #     (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
-                # ),
+                transforms.Normalize(
+                    (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                ),
             ]
         )
     elif args.dataset == "cifar100":
@@ -73,15 +83,17 @@ def main(args):
         )
         transform_train = transforms.Compose(
             [
+                transforms.RandomCrop(32, padding=4),
+                transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                # transforms.Normalize(CIFAR100_TRAIN_MEAN, CIFAR100_TRAIN_STD),
+                transforms.Normalize(CIFAR100_TRAIN_MEAN, CIFAR100_TRAIN_STD),
             ]
         )
 
         transform_test = transforms.Compose(
             [
                 transforms.ToTensor(),
-                # transforms.Normalize(CIFAR100_TRAIN_MEAN, CIFAR100_TRAIN_STD),
+                transforms.Normalize(CIFAR100_TRAIN_MEAN, CIFAR100_TRAIN_STD),
             ]
         )
     elif args.dataset == "svhn":
@@ -106,7 +118,7 @@ def main(args):
 
     if args.dataset == "cifar10":
         train_set = torchvision.datasets.CIFAR10(
-            root="../data", train=True, download=True, transform=transform
+            root="../data", train=True, download=True, transform=transform_train
         )
         train_loader = DataLoader(
             train_set,
@@ -115,7 +127,7 @@ def main(args):
             num_workers=num_workers,
         )
         held_out = torchvision.datasets.CIFAR10(
-            root="../data", train=False, download=True, transform=transform
+            root="../data", train=False, download=True, transform=transform_test
         )
         args.num_class = 10
     elif args.dataset == "cifar100":
@@ -275,14 +287,14 @@ def main(args):
             local_path = (
                 args.model_path
                 if args.model_path
-                else os.path.join(ROOT_DIR, "../models/pretrain_checkpoint_cifar10.pt")
+                else os.path.join(ROOT_DIR, "../models/cifar10_resnet18_95.pt")
             )
             # local_path = '/code/Unlearn-Bench/examples/results/CIFAR10/ResNet18/EmpiricalRiskMinimization/pretrain/name_vanilla_train_seed_2/pretrain_checkpoint.pt'
         elif args.dataset == "cifar100":
             local_path = (
                 args.model_path
                 if args.model_path
-                else os.path.join(ROOT_DIR, "../models/pretrain_checkpoint_cifar100.pt")
+                else os.path.join(ROOT_DIR, "../models/cifar100_resnet18_ckpt_77.pt")
             )
             # local_path = '/code/Unlearn-Bench/examples/results/CIFAR100/ResNet18/EmpiricalRiskMinimization/pretrain/name_vanilla_train_seed_2/pretrain_checkpoint.pt'
         elif args.dataset == "svhn":
@@ -303,6 +315,7 @@ def main(args):
     if args.dataset != "20ng":
         weights_pretrained = torch.load(local_path, map_location=DEVICE)
         from resnet import resnet18
+
         model_ft = resnet18(num_classes=args.num_class)
         ## change the first conv layer for smaller images
         # model_ft.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1, bias=False)
