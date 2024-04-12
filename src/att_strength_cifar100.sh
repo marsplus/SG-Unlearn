@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ne=10
+ne=30
 cv=3
 d=100
 clas=SVM
