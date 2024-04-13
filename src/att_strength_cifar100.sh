@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ne=10
+ne=30
 cv=3
 d=100
 clas=SVM
@@ -27,6 +27,6 @@ do
             --save_checkpoint=1 \
             --attacker_strength=$atts \
             --mem_save=10 \
-            --baseline_mode=1
+            --baseline_mode=0
     done
 done

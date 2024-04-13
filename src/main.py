@@ -17,12 +17,12 @@ import torchvision
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-# from torchvision.models import resnet18
+from torchvision.models import resnet18
 from transformers import AutoModel, AutoTokenizer
 
 import utils_20ng
 from models import DefenderOPT
-from resnet import resnet18
+# from resnet import resnet18
 from utils import random_split
 
 warnings.simplefilter(action="ignore", category=Warning)
@@ -287,14 +287,14 @@ def main(args):
             local_path = (
                 args.model_path
                 if args.model_path
-                else os.path.join(ROOT_DIR, "../models/cifar10_resnet18_95.pt")
+                else os.path.join(ROOT_DIR, "../models/pretrain_checkpoint_cifar10_normalized.pt")
             )
             # local_path = '/code/Unlearn-Bench/examples/results/CIFAR10/ResNet18/EmpiricalRiskMinimization/pretrain/name_vanilla_train_seed_2/pretrain_checkpoint.pt'
         elif args.dataset == "cifar100":
             local_path = (
                 args.model_path
                 if args.model_path
-                else os.path.join(ROOT_DIR, "../models/cifar100_resnet18_ckpt_77.pt")
+                else os.path.join(ROOT_DIR, "../models/pretrain_checkpoint_cifar100_normalized.pt")
             )
             # local_path = '/code/Unlearn-Bench/examples/results/CIFAR100/ResNet18/EmpiricalRiskMinimization/pretrain/name_vanilla_train_seed_2/pretrain_checkpoint.pt'
         elif args.dataset == "svhn":
@@ -314,11 +314,12 @@ def main(args):
 
     if args.dataset != "20ng":
         weights_pretrained = torch.load(local_path, map_location=DEVICE)
-        from resnet import resnet18
+        # from resnet import resnet18
 
         model_ft = resnet18(num_classes=args.num_class)
         ## change the first conv layer for smaller images
-        # model_ft.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1, bias=False)
+        model_ft.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1, bias=False)
+        model_ft.maxpool = nn.Identity()
         model_ft.load_state_dict(weights_pretrained)
         model_ft.to(DEVICE)
     else:
