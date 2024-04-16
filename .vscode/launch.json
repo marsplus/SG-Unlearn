@@ -23,5 +23,24 @@
                 "--baseline_mode", "1"
             ]
         },
+        {
+            "name": "SG_eval",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/code/SG-Unlearn/src/evaluate.py",
+            "console": "integratedTerminal",
+            "cwd": "/code/SG-Unlearn/src",
+            "args": [
+                "--device_id", "0",
+                "--dataset", "cifar10",
+                "--checkpoint_path", "../result/SG_diff_strength_mini_batch",
+                "--method", "SG",
+                // "--output_dir", "../result/SG_data",
+                // "--seed", "3",
+                // "--dataset", "cifar10",
+                // "--save_checkpoint", "1",
+                // "--baseline_mode", "1"
+            ]
+        }
     ]
 }
