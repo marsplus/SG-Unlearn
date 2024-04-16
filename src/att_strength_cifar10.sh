@@ -12,7 +12,7 @@ mkdir -p $output_dir
 # for atts in 0.05 0.1 0.25 0.5 1 2 5 0
 for atts in 1
 do  
-    for seed in {6..10}
+    for seed in {1..10}
     do  
         python main.py \
             --device_id=$1 \
