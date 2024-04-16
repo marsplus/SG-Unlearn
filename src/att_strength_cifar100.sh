@@ -10,8 +10,8 @@ output_dir="../result/SG_diff_strength_mini_batch/${dataset}"
 mkdir -p $output_dir
 
 # atts=$2
-# for atts in 0.05 0.1 0.25 0.5 1 2 5 0
-for atts in 1
+for atts in 0.05 0.1 0.25 0.5 1 2 5 0
+# for atts in 1
 do  
     for seed in {1..10}
     do  
