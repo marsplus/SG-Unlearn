@@ -79,7 +79,7 @@ def evaluate_model(model=None, data=None, batch_size=128, seed=1, device="cuda:0
     return ret
 
 
-def get_stats(path_to_ckpts, is_SG=False):
+def get_stats(path_to_ckpts, is_SG=False, device_id=0):
     """
     Evaluate the checkpoints of an experiment with a particular evaluation function
     """
@@ -87,11 +87,11 @@ def get_stats(path_to_ckpts, is_SG=False):
     evaluate_func = lambda ret: ret["val accuracy"] - ret["MIA accuracy"]
     if not is_SG:
         all_ckpts = [
-            torch.load(f, map_location="cuda:0")["evaluation_result"]
+            torch.load(f, map_location=f"cuda:{device_id}")["evaluation_result"]
             for f in path_to_ckpts
         ]
     else:
-        all_ckpts = [torch.load(f, map_location="cuda:0") for f in path_to_ckpts]
+        all_ckpts = [torch.load(f, map_location=f"cuda:{device_id}") for f in path_to_ckpts]
     n = len(all_ckpts)
     ret = defaultdict(float)
     for d in all_ckpts:
@@ -105,7 +105,8 @@ def FT_hyperparam_search(args):
     best_metric = float("-inf")
     best = None
     best_param = (None, None)
-    for lr in [0.0001, 0.001, 0.01, 0.1]:
+    ## candidate learning rates for FT
+    for lr in ["0.0001", "0.001", "0.01", "0.1"]:
         # for lr in ['0.0000001', '0.000001', '0.00001']:   ## for 20 Newsgroups
         for ep in [5, 10, 15]:
             folder_path = os.path.join(
@@ -118,7 +119,7 @@ def FT_hyperparam_search(args):
             ]
             if not path_to_ckpts:
                 continue
-            eval_metric, ret = get_stats(path_to_ckpts)
+            eval_metric, ret = get_stats(path_to_ckpts, device_id=args.device_id)
             if eval_metric > best_metric:
                 best_metric = eval_metric
                 best = ret
@@ -131,6 +132,7 @@ def GA_hyperparam_search(args):
     best_metric = float("-inf")
     best = None
     best_param = (None, None)
+    ## candidate learning rates for GA
     for lr in ["0.000001", "0.00001", "0.0001", "0.001"]:
         # for lr in ['0.0000001', '0.00000001', '0.000001', '0.00001', '0.0001', '0.001']:   ## for 20 Newsgroups
         for ep in [5, 10, 15]:
@@ -157,7 +159,7 @@ def GA_hyperparam_search(args):
             ]
             if not path_to_ckpts:
                 continue
-            eval_metric, ret = get_stats(path_to_ckpts)
+            eval_metric, ret = get_stats(path_to_ckpts, device_id=args.device_id)
             if eval_metric > best_metric:
                 best_metric = eval_metric
                 best = ret
@@ -198,7 +200,7 @@ def fisher_hyperparam_search(args):
         ]
         if not path_to_ckpts:
             continue
-        eval_metric, ret = get_stats(path_to_ckpts)
+        eval_metric, ret = get_stats(path_to_ckpts, device_id=args.device_id)
         if eval_metric > best_metric:
             best_metric = eval_metric
             best = ret
@@ -226,7 +228,7 @@ def retrain_hyperparam_search(args):
     ]
     if not path_to_ckpts:
         raise ValueError("Empty retrain data.")
-    eval_metric, ret = get_stats(path_to_ckpts)
+    eval_metric, ret = get_stats(path_to_ckpts, device_id=args.device_id)
     if eval_metric > best_metric:
         best_metric = eval_metric
         best = ret
@@ -256,7 +258,7 @@ def SG_hyperparam_search(args):
         )
         if not path_to_ckpts:
             continue
-        eval_metric, ret = get_stats(path_to_ckpts, is_SG=True)
+        eval_metric, ret = get_stats(path_to_ckpts, is_SG=True, device_id=args.device_id)
         if eval_metric > best_metric:
             best_metric = eval_metric
             best = ret
