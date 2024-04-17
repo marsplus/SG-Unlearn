@@ -307,6 +307,8 @@ class DefenderOPT(nn.Module):
                 f"MIA accuracy: {MIA_accuracy.item():.4f}, ",
                 f"MIA auc: {MIA_auc.item():.4f}, ",
                 f"MIA recall: {MIA_recall.item():.4f}, ",
+                f"Attacker lr: {self.attacker_lr:.4f}, ",
+                f"Defender lr: {self.defender_lr:.4f}, ",
             )
             print(
                 f"time/epoch: {t_all:.4f} min; attacker opt: {t_att:.4f} ({t_att/t_all:.2f})"
