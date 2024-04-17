@@ -9,7 +9,6 @@ import pdb
 import warnings
 from collections import defaultdict
 
-import mia_evaluate
 import numpy as np
 import torch
 import torch.nn as nn
@@ -17,6 +16,8 @@ import torchvision
 from scipy.stats import ks_2samp
 from torch.utils.data import DataLoader
 from torchvision.models import resnet18
+
+import mia_evaluate
 from utils import evaluate_accuracy, wasserstein_distance_1d
 
 warnings.simplefilter(action="ignore", category=Warning)
@@ -79,7 +80,7 @@ def evaluate_model(model=None, data=None, batch_size=128, seed=1, device="cuda:0
     return ret
 
 
-def get_stats(path_to_ckpts, is_SG=False, device_id=0):
+def get_stats(path_to_ckpts, is_SG=False):
     """
     Evaluate the checkpoints of an experiment with a particular evaluation function
     """
@@ -87,26 +88,33 @@ def get_stats(path_to_ckpts, is_SG=False, device_id=0):
     evaluate_func = lambda ret: ret["val accuracy"] - ret["MIA accuracy"]
     if not is_SG:
         all_ckpts = [
-            torch.load(f, map_location=f"cuda:{device_id}")["evaluation_result"]
+            torch.load(f, map_location="cuda:0")["evaluation_result"]
             for f in path_to_ckpts
         ]
     else:
-        all_ckpts = [torch.load(f, map_location=f"cuda:{device_id}") for f in path_to_ckpts]
+        all_ckpts = [torch.load(f, map_location="cuda:0") for f in path_to_ckpts]
     n = len(all_ckpts)
-    ret = defaultdict(float)
-    for d in all_ckpts:
-        for key, value in d.items():
-            ret[key] += value / n
-    eval_metric = evaluate_func(ret)
-    return (eval_metric, ret)
+    ret_mean = defaultdict(float)
+    ret_std = defaultdict(float)
+    all_keys = list(all_ckpts[0].keys())
+    for key in all_keys:
+        temp = []
+        for d in all_ckpts:
+            temp.append(d[key])
+        ret_mean[key] = np.mean(temp)
+        ret_std[key] = np.std(temp)
+    # for d in all_ckpts:
+    #     for key, value in d.items():
+    #         ret[key] += value / n
+    eval_metric = evaluate_func(ret_mean)
+    return (eval_metric, ret_mean, ret_std)
 
 
 def FT_hyperparam_search(args):
     best_metric = float("-inf")
     best = None
     best_param = (None, None)
-    ## candidate learning rates for FT
-    for lr in ["0.0001", "0.001", "0.01", "0.1"]:
+    for lr in [0.0001, 0.001, 0.01, 0.1]:
         # for lr in ['0.0000001', '0.000001', '0.00001']:   ## for 20 Newsgroups
         for ep in [5, 10, 15]:
             folder_path = os.path.join(
@@ -119,7 +127,7 @@ def FT_hyperparam_search(args):
             ]
             if not path_to_ckpts:
                 continue
-            eval_metric, ret = get_stats(path_to_ckpts, device_id=args.device_id)
+            eval_metric, ret = get_stats(path_to_ckpts)
             if eval_metric > best_metric:
                 best_metric = eval_metric
                 best = ret
@@ -132,7 +140,6 @@ def GA_hyperparam_search(args):
     best_metric = float("-inf")
     best = None
     best_param = (None, None)
-    ## candidate learning rates for GA
     for lr in ["0.000001", "0.00001", "0.0001", "0.001"]:
         # for lr in ['0.0000001', '0.00000001', '0.000001', '0.00001', '0.0001', '0.001']:   ## for 20 Newsgroups
         for ep in [5, 10, 15]:
@@ -159,7 +166,7 @@ def GA_hyperparam_search(args):
             ]
             if not path_to_ckpts:
                 continue
-            eval_metric, ret = get_stats(path_to_ckpts, device_id=args.device_id)
+            eval_metric, ret = get_stats(path_to_ckpts)
             if eval_metric > best_metric:
                 best_metric = eval_metric
                 best = ret
@@ -200,7 +207,7 @@ def fisher_hyperparam_search(args):
         ]
         if not path_to_ckpts:
             continue
-        eval_metric, ret = get_stats(path_to_ckpts, device_id=args.device_id)
+        eval_metric, ret = get_stats(path_to_ckpts)
         if eval_metric > best_metric:
             best_metric = eval_metric
             best = ret
@@ -228,7 +235,7 @@ def retrain_hyperparam_search(args):
     ]
     if not path_to_ckpts:
         raise ValueError("Empty retrain data.")
-    eval_metric, ret = get_stats(path_to_ckpts, device_id=args.device_id)
+    eval_metric, ret = get_stats(path_to_ckpts)
     if eval_metric > best_metric:
         best_metric = eval_metric
         best = ret
@@ -248,6 +255,7 @@ def SG_hyperparam_search(args):
         raise ValueError
     best_metric = float("-inf")
     best = None
+    best_std = None
     best_param = None
     for ep in [5, 10, 15, 20, 25, 30]:
         path_to_ckpts = glob.glob(
@@ -258,13 +266,14 @@ def SG_hyperparam_search(args):
         )
         if not path_to_ckpts:
             continue
-        eval_metric, ret = get_stats(path_to_ckpts, is_SG=True, device_id=args.device_id)
+        eval_metric, ret_mean, ret_std = get_stats(path_to_ckpts, is_SG=True)
         if eval_metric > best_metric:
             best_metric = eval_metric
-            best = ret
+            best = ret_mean
+            best_std = ret_std
             best_param = ep
     print("Best epoch: ", best_param)
-    return best
+    return best, best_std
     # dim = 100 if args.dataset == 'cifar100' else 10
     # path_to_ckpts = glob.glob(os.path.join(args.checkpoint_path, f'{args.dataset}/eval_num_epoch_{args.num_epoch}_cv_3_dim_{dim}_atts_{args.attacker_strength}_seed_*_{args.dataset}.pth'))
     # n = len(path_to_ckpts)
@@ -279,8 +288,8 @@ def SG_hyperparam_search(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, default="cifar10")
-    parser.add_argument("--checkpoint_path", type=str, default=".")
-    parser.add_argument("--method", type=str, default="FT")
+    parser.add_argument("--checkpoint_path", type=str, default="../result/SG_diff_strength_mini_batch")
+    parser.add_argument("--method", type=str, default="SG")
     parser.add_argument("--num_epoch", type=int, default=5)
     parser.add_argument("--attacker_strength", type=int, default=1)
     parser.add_argument("--device_id", type=int, default=0)
@@ -295,7 +304,7 @@ if __name__ == "__main__":
     elif args.method == "retrain":
         best_ret = retrain_hyperparam_search(args)
     elif args.method == "SG":
-        best_ret = SG_hyperparam_search(args)
+        best_ret, best_std = SG_hyperparam_search(args)
 
     # best_ret['time'] /= 60.0
     for key, value in best_ret.items():
@@ -305,3 +314,7 @@ if __name__ == "__main__":
         f"|forget - test|: {np.abs(best_ret['forget accuracy'] - best_ret['test accuracy']):.4f}"
     )
     print("\n")
+    # print(best_std)
+    for key, value in best_std.items():
+        if "losses" not in key:
+            print(f"{key}: {value:.4f}")
