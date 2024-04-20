@@ -14,16 +14,16 @@ import torch
 import torch.nn as nn
 import torch.utils.data as Data
 import torchvision
-import utils_20ng
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
 # from resnet import resnet18
 from torchvision.models import resnet18
 from transformers import AutoModel, AutoTokenizer
-from utils import random_split
 
+import utils_20ng
 from models import DefenderOPT
+from utils import random_split
 
 warnings.simplefilter(action="ignore", category=Warning)
 
@@ -275,13 +275,17 @@ def main(args):
             local_path = (
                 args.model_path
                 if args.model_path
-                else os.path.join(ROOT_DIR, "../models/cifar10_resnet18_ckpt_93_no_pooling.pt")
+                else os.path.join(
+                    ROOT_DIR, "../models/cifar10_resnet18_ckpt_93_no_pooling.pt"
+                )
             )
         elif args.dataset == "cifar100":
             local_path = (
                 args.model_path
                 if args.model_path
-                else os.path.join(ROOT_DIR, "../models/cifar100_resnet18_ckpt_71_no_pooling.pt")
+                else os.path.join(
+                    ROOT_DIR, "../models/cifar100_resnet18_ckpt_71_no_pooling.pt"
+                )
             )
         elif args.dataset == "svhn":
             local_path = (

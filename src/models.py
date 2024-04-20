@@ -12,7 +12,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from cvxpylayers.torch import CvxpyLayer
-from evaluate import evaluate_model
 
 # from memory_profiler import profile
 from sklearn.model_selection import (
@@ -22,6 +21,8 @@ from sklearn.model_selection import (
 )
 from sklearn.svm import LinearSVC
 from torch.utils.data import DataLoader
+
+from evaluate import evaluate_model
 from utils import BinaryClassificationDataset, wasserstein_distance_1d
 
 # from qpth.qp import QPFunction
@@ -309,6 +310,7 @@ class DefenderOPT(nn.Module):
                 f"MIA recall: {MIA_recall.item():.4f}, ",
                 f"Attacker lr: {self.attacker_lr:.4f}, ",
                 f"Defender lr: {self.defender_lr:.4f}, ",
+                f"attack str: {self.attacker_strength}",
             )
             print(
                 f"time/epoch: {t_all:.4f} min; attacker opt: {t_att:.4f} ({t_att/t_all:.2f})"
