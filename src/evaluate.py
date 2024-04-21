@@ -261,9 +261,10 @@ def SG_hyperparam_search(args):
         path_to_ckpts = glob.glob(
             os.path.join(
                 args.checkpoint_path,
-                f"{args.dataset}/eval_num_epoch_{ep}_cv_3_dim_{dim}_atts_1.0_seed_*.pth",
+                f"{args.dataset}/eval_num_epoch_{ep}_cv_3_dim_{dim}_atts_{args.attacker_strength}_seed_*.pth",
             )
         )
+        print(len(path_to_ckpts))
         if not path_to_ckpts:
             continue
         eval_metric, ret_mean, ret_std = get_stats(path_to_ckpts, is_SG=True)
@@ -288,10 +289,12 @@ def SG_hyperparam_search(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, default="cifar10")
-    parser.add_argument("--checkpoint_path", type=str, default="../result/SG_diff_strength_mini_batch")
+    parser.add_argument(
+        "--checkpoint_path", type=str, default="../result/SG_diff_strength_mini_batch"
+    )
     parser.add_argument("--method", type=str, default="SG")
     parser.add_argument("--num_epoch", type=int, default=5)
-    parser.add_argument("--attacker_strength", type=int, default=1)
+    parser.add_argument("--attacker_strength", type=float, default=1)
     parser.add_argument("--device_id", type=int, default=0)
     args = parser.parse_args()
 
