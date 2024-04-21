@@ -289,7 +289,7 @@ class DefenderOPT(nn.Module):
             new_forget_set = ReLabelDataset(forget_set, new_label)
             unlearn_set = ConcatDataset([remain_set, new_forget_set])
             self.unlearn_loader = DataLoader(
-                unlearn_set, batch_size=self.batch_size, shuffle=True, num_worker=4
+                unlearn_set, batch_size=self.batch_size, shuffle=True, num_workers=4
             )
 
         net.train()
@@ -298,8 +298,9 @@ class DefenderOPT(nn.Module):
             try:
                 if self.SG_base_method == "FT":
                     for inputs, targets in self.retain_loader:
-                        inputs, targets = inputs.to(self.device), targets.to(
-                            self.device
+                        inputs, targets = (
+                            inputs.to(self.device),
+                            targets.to(self.device),
                         )
                         optimizer.zero_grad()
                         outputs = net(inputs)
@@ -308,8 +309,9 @@ class DefenderOPT(nn.Module):
                         optimizer.step()
                 elif self.SG_base_method == "RL":
                     for inputs, targets in self.unlearn_loader:
-                        inputs, targets = inputs.to(self.device), targets.to(
-                            self.device
+                        inputs, targets = (
+                            inputs.to(self.device),
+                            targets.to(self.device),
                         )
                         optimizer.zero_grad()
                         outputs = net(inputs)

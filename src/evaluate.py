@@ -84,8 +84,13 @@ def get_stats(path_to_ckpts, is_SG=False):
     """
     Evaluate the checkpoints of an experiment with a particular evaluation function
     """
-    ## the evaluation metric to decide which hyper-params to choose
-    evaluate_func = lambda ret: ret["val accuracy"] - ret["MIA accuracy"]
+
+    ## this function is an instantiation of the defender's utility, i.e.,
+    ## the accuracy on unseen data (quantifying the unlearned model's predictive power) -
+    ## the accuracy of MIA (quantifying the effectiveness of unlearning)
+    def evaluate_func_for_plotting(ret):
+        return ret["val accuracy"] - ret["MIA accuracy"]
+
     if not is_SG:
         all_ckpts = [
             torch.load(f, map_location="cuda:0")["evaluation_result"]
