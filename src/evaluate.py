@@ -111,7 +111,7 @@ def get_stats(path_to_ckpts, is_SG=False):
     # for d in all_ckpts:
     #     for key, value in d.items():
     #         ret[key] += value / n
-    eval_metric = evaluate_func(ret_mean)
+    eval_metric = evaluate_func_for_plotting(ret_mean)
     return (eval_metric, ret_mean, ret_std)
 
 
