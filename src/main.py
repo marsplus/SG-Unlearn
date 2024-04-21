@@ -345,6 +345,7 @@ def main(args):
         attacker_strength=args.attacker_strength,
         save_checkpoint=args.save_checkpoint,
         classwise=args.classwise,
+        SG_base_method=args.SG_base_method,
     )
     defender.unlearn(model_ft)
 
@@ -382,6 +383,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", type=str, default=None)
     parser.add_argument("--mem_save", type=int, default=20)
     parser.add_argument("--classwise", type=int, default=0)
+    parser.add_argument("--SG_base_method", type=str, default="FT")
     args = parser.parse_args()
 
     RNG = torch.Generator().manual_seed(args.seed)
