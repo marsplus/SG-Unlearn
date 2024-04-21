@@ -20,7 +20,7 @@ from sklearn.model_selection import (
     cross_val_score,
 )
 from sklearn.svm import LinearSVC
-from torch.utils.data import DataLoader
+from torch.utils.data import ConcatDataset, DataLoader, Dataset
 
 from evaluate import evaluate_model
 from utils import BinaryClassificationDataset, wasserstein_distance_1d
@@ -47,6 +47,63 @@ class MLP(nn.Module):
         x = torch.relu(x)
         x = self.fc2(x)
         return self.sigmoid(x)
+
+
+class ReLabelDataset(Dataset):
+    def __init__(self, original_dataset, new_labels):
+        self.original_dataset = original_dataset
+        self.new_labels = new_labels
+
+    def __len__(self):
+        return len(self.original_dataset)
+
+    def __getattr__(self, name: str):
+        return getattr(self.original_dataset, name)
+
+    def __getitem__(self, index):
+        datas = list(self.original_dataset[index])
+        datas[-1] = self.new_labels[index]
+        return tuple(datas)
+
+
+# def step(self, remain_loader, forget_loader):
+#     remain_set = remain_loader.dataset
+#     forget_set = forget_loader.dataset
+
+#     label_type = type(remain_set[0][-1])
+#     new_label = np.random.randint(self.num_classes - 1, size=len(forget_set))
+
+#     for i in range(len(forget_set)):
+#         if new_label[i] >= forget_set[i][-1]:
+#             new_label[i] += 1
+
+#     if label_type == torch.Tensor:
+#         new_label = torch.tensor(new_label, dtype=torch.long)
+#     elif label_type == np.ndarray:
+#         new_label = np.array(new_label, dtype=np.int64)
+#     else:
+#         pass
+
+#     new_forget_set = ReLabelDataset(forget_set, new_label)
+#     unlearn_set = ConcatDataset([remain_set, new_forget_set])
+#     unlearn_loader = DataLoader(unlearn_set, **self.loader_kwargs)
+
+#     optimizer = torch.optim.SGD(self.model.parameters(), self.lr)
+
+#     self.model.train()
+
+#     import tqdm
+
+#     for epoch in tqdm.trange(self.epoch, desc=f"{self.__class__.__name__}"):
+#         for batch in unlearn_loader:
+#             batch = [data.to(self.model.device) for data in batch]
+#             input = batch[:-1]
+#             label = batch[-1]
+
+#             optimizer.zero_grad()
+#             loss = self.model.criterion(self.model(*input), label)
+#             loss.backward()
+#             optimizer.step()
 
 
 class DefenderOPT(nn.Module):
@@ -79,6 +136,7 @@ class DefenderOPT(nn.Module):
         attacker_strength: float = 1.0,
         save_checkpoint: bool = True,
         classwise: bool = False,
+        SG_base_method: str = "FT",
     ):
         """
         dim: the dimension of the score vectors.
@@ -117,6 +175,7 @@ class DefenderOPT(nn.Module):
         self.attacker_strength = attacker_strength
         self.save_checkpoint = save_checkpoint
         self.classwise = classwise
+        self.SG_base_method = SG_base_method
 
         ## cross-validation split used in the attacker's optimization
         ## it's initialized here for having consistent number of train/test data
@@ -208,29 +267,73 @@ class DefenderOPT(nn.Module):
             self._save_ckpt(net, epoch)
             return net
 
+        # Before Training
+        if self.SG_base_method == "RL":
+            remain_set = self.retain_loader.dataset
+            forget_set = self.forget_loader.dataset
+
+            label_type = type(remain_set[0][-1])
+            new_label = np.random.randint(self.num_class - 1, size=len(forget_set))
+
+            for i in range(len(forget_set)):
+                if new_label[i] >= forget_set[i][-1]:
+                    new_label[i] += 1
+
+            if label_type == torch.Tensor:
+                new_label = torch.tensor(new_label, dtype=torch.long)
+            elif label_type == np.ndarray:
+                new_label = np.array(new_label, dtype=np.int64)
+            else:
+                pass
+
+            new_forget_set = ReLabelDataset(forget_set, new_label)
+            unlearn_set = ConcatDataset([remain_set, new_forget_set])
+            self.unlearn_loader = DataLoader(
+                unlearn_set, batch_size=self.batch_size, shuffle=True, num_worker=4
+            )
+
         net.train()
         for epoch in range(self.num_epoch):
             t_start = time.time()
             try:
-                for inputs, targets in self.retain_loader:
-                    inputs, targets = inputs.to(self.device), targets.to(self.device)
-                    optimizer.zero_grad()
-                    outputs = net(inputs)
-                    u_d = -loss_func(outputs, targets)
-                    (-u_d).backward()
-                    optimizer.step()
+                if self.SG_base_method == "FT":
+                    for inputs, targets in self.retain_loader:
+                        inputs, targets = inputs.to(self.device), targets.to(
+                            self.device
+                        )
+                        optimizer.zero_grad()
+                        outputs = net(inputs)
+                        u_d = -loss_func(outputs, targets)
+                        (-u_d).backward()
+                        optimizer.step()
+                elif self.SG_base_method == "RL":
+                    for inputs, targets in self.unlearn_loader:
+                        inputs, targets = inputs.to(self.device), targets.to(
+                            self.device
+                        )
+                        optimizer.zero_grad()
+                        outputs = net(inputs)
+                        u_d = -loss_func(outputs, targets)
+                        (-u_d).backward()
+                        optimizer.step()
+
             except ValueError as e:
-                for inputs, masks, targets in self.retain_loader:
-                    inputs, masks, targets = (
-                        inputs.to(self.device),
-                        masks.to(self.device),
-                        targets.to(self.device),
+                if self.SG_base_method == "FT":
+                    for inputs, masks, targets in self.retain_loader:
+                        inputs, masks, targets = (
+                            inputs.to(self.device),
+                            masks.to(self.device),
+                            targets.to(self.device),
+                        )
+                        optimizer.zero_grad()
+                        outputs = net(inputs, masks)
+                        u_d = -loss_func(outputs, targets)
+                        (-u_d).backward()
+                        optimizer.step()
+                else:
+                    raise NotImplementedError(
+                        "The other method has not been supported."
                     )
-                    optimizer.zero_grad()
-                    outputs = net(inputs, masks)
-                    u_d = -loss_func(outputs, targets)
-                    (-u_d).backward()
-                    optimizer.step()
 
             t_att_start = time.time()
             if self.with_attacker:
@@ -311,6 +414,7 @@ class DefenderOPT(nn.Module):
                 f"Attacker lr: {self.attacker_lr:.4f}, ",
                 f"Defender lr: {self.defender_lr:.4f}, ",
                 f"attack str: {self.attacker_strength}",
+                f"SG_base_method: {self.SG_base_method}",
             )
             print(
                 f"time/epoch: {t_all:.4f} min; attacker opt: {t_att:.4f} ({t_att/t_all:.2f})"
