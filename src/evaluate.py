@@ -10,6 +10,7 @@ import warnings
 from collections import defaultdict
 
 import numpy as np
+import scipy.stats
 import torch
 import torch.nn as nn
 import torchvision
@@ -21,6 +22,14 @@ import mia_evaluate
 from utils import evaluate_accuracy, wasserstein_distance_1d
 
 warnings.simplefilter(action="ignore", category=Warning)
+
+
+def mean_confidence_interval(data, confidence=0.95):
+    a = 1.0 * np.array(data)
+    n = len(a)
+    m, se = np.mean(a), scipy.stats.sem(a)
+    h = se * scipy.stats.t.ppf((1 + confidence) / 2.0, n - 1)
+    return m, m - h, m + h
 
 
 def evaluate_model(model=None, data=None, batch_size=128, seed=1, device="cuda:0"):
@@ -96,6 +105,7 @@ def get_stats(path_to_ckpts, is_SG=False):
     n = len(all_ckpts)
     ret_mean = defaultdict(float)
     ret_std = defaultdict(float)
+    ret_mean_95 = defaultdict(tuple)
     all_keys = list(all_ckpts[0].keys())
     for key in all_keys:
         temp = []
@@ -103,11 +113,12 @@ def get_stats(path_to_ckpts, is_SG=False):
             temp.append(d[key])
         ret_mean[key] = np.mean(temp)
         ret_std[key] = np.std(temp)
+        ret_mean_95[key] = mean_confidence_interval(temp)
     # for d in all_ckpts:
     #     for key, value in d.items():
     #         ret[key] += value / n
     eval_metric = evaluate_func(ret_mean)
-    return (eval_metric, ret_mean, ret_std)
+    return (eval_metric, ret_mean, ret_std, ret_mean_95)
 
 
 def FT_hyperparam_search(args):
@@ -257,17 +268,30 @@ def SG_hyperparam_search(args):
     best = None
     best_std = None
     best_param = None
-    for ep in [5, 10, 15, 20, 25, 30]:
-        path_to_ckpts = glob.glob(
-            os.path.join(
-                args.checkpoint_path,
-                f"{args.dataset}/eval_num_epoch_{ep}_cv_3_dim_{dim}_atts_{args.attacker_strength}_seed_*.pth",
+    for ep in range(1, 31):
+        if args.baseline_method == "RL":
+            path_to_ckpts = glob.glob(
+                os.path.join(
+                    args.checkpoint_path,
+                    f"{args.dataset}/eval_num_epoch_{ep}_cv_3_dim_{dim}_atts_{args.attacker_strength}_seed_*_baseline_RL.pth",
+                )
             )
-        )
-        print(len(path_to_ckpts))
+        else:
+            path_to_ckpts = glob.glob(
+                os.path.join(
+                    args.checkpoint_path,
+                    f"{args.dataset}/eval_num_epoch_{ep}_cv_3_dim_{dim}_atts_{args.attacker_strength}_seed_*_baseline_FT.pth",
+                )
+            )
+        print(f"Epoch: {ep}, {len(path_to_ckpts)}")
         if not path_to_ckpts:
             continue
-        eval_metric, ret_mean, ret_std = get_stats(path_to_ckpts, is_SG=True)
+        eval_metric, ret_mean, ret_std, ret_mean_95 = get_stats(
+            path_to_ckpts, is_SG=True
+        )
+        print_result(ret_mean)
+        print_result(ret_std)
+        print(ret_mean_95)
         if eval_metric > best_metric:
             best_metric = eval_metric
             best = ret_mean
@@ -286,6 +310,17 @@ def SG_hyperparam_search(args):
     # return ret
 
 
+def print_result(data):
+    # best_ret['time'] /= 60.0
+    for key, value in data.items():
+        if "losses" not in key:
+            print(f"{key}: {value:.4f}")
+    print(
+        f"|forget - test|: {np.abs(data['forget accuracy'] - data['test accuracy']):.4f}"
+    )
+    print("\n")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, default="cifar10")
@@ -296,6 +331,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_epoch", type=int, default=5)
     parser.add_argument("--attacker_strength", type=float, default=1)
     parser.add_argument("--device_id", type=int, default=0)
+    parser.add_argument("--baseline_method", type=str, default="FT")
     args = parser.parse_args()
 
     if args.method == "FT":
@@ -309,6 +345,7 @@ if __name__ == "__main__":
     elif args.method == "SG":
         best_ret, best_std = SG_hyperparam_search(args)
 
+    print("Best Results\n\n")
     # best_ret['time'] /= 60.0
     for key, value in best_ret.items():
         if "losses" not in key:
