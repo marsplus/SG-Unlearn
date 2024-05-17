@@ -199,7 +199,7 @@ class DefenderOPT(nn.Module):
             eval_ret,
             os.path.join(
                 self.output_dir,
-                f"eval_num_epoch_{epoch}_cv_{self.cv}_dim_{self.dim}_atts_{self.attacker_strength}_seed_{self.seed}.pth",
+                f"eval_num_epoch_{epoch}_cv_{self.cv}_dim_{self.dim}_atts_{self.attacker_strength}_seed_{self.seed}_baseline_{self.SG_base_method}.pth",
             ),
         )
         ## save model checkpoints
@@ -208,7 +208,7 @@ class DefenderOPT(nn.Module):
             checkpoint,
             os.path.join(
                 self.output_dir,
-                f"SGcheckpoint_num_epoch_{epoch}_cv_{self.cv}_dim_{self.dim}_atts_{self.attacker_strength}_seed_{self.seed}.pth",
+                f"SGcheckpoint_num_epoch_{epoch}_cv_{self.cv}_dim_{self.dim}_atts_{self.attacker_strength}_seed_{self.seed}_baseline_{self.SG_base_method}.pth",
             ),
         )
 
@@ -232,9 +232,9 @@ class DefenderOPT(nn.Module):
             momentum=self.momentum,
             weight_decay=self.weight_decay,
         )
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=self.num_epoch
-        )
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        #     optimizer, T_max=self.num_epoch
+        # )
 
         ## check the performance before any optimization
         if self.baseline_mode:
@@ -247,7 +247,7 @@ class DefenderOPT(nn.Module):
             retain_accuracy = self._evaluate_accuracy(
                 net, self.retain_loader, device=self.device
             )
-            MIA_accuracy, MIA_recall, MIA_auc = DefenderOPT._evaluate_MIA(
+            MIA_accuracy, MIA_recall, MIA_auc, MIA_f1 = DefenderOPT._evaluate_MIA(
                 net,
                 self.forget_loader,
                 self.val_loader,
@@ -261,7 +261,8 @@ class DefenderOPT(nn.Module):
                 f"retain accuracy: {retain_accuracy:.4f}, "
                 f"MIA accuracy: {MIA_accuracy.item():.4f}, "
                 f"MIA auc: {MIA_auc.item():.4f}, "
-                f"MIA recall: {MIA_recall.item():.4f}"
+                f"MIA recall: {MIA_recall.item():.4f}, "
+                f"MIA f1: {MIA_f1.item():.4f}"
             )
             epoch = 0
             self._save_ckpt(net, epoch)
@@ -289,7 +290,7 @@ class DefenderOPT(nn.Module):
             new_forget_set = ReLabelDataset(forget_set, new_label)
             unlearn_set = ConcatDataset([remain_set, new_forget_set])
             self.unlearn_loader = DataLoader(
-                unlearn_set, batch_size=self.batch_size, shuffle=True, num_worker=4
+                unlearn_set, batch_size=self.batch_size, shuffle=True, num_workers=4
             )
 
         net.train()
@@ -316,7 +317,6 @@ class DefenderOPT(nn.Module):
                         u_d = -loss_func(outputs, targets)
                         (-u_d).backward()
                         optimizer.step()
-
             except ValueError as e:
                 if self.SG_base_method == "FT":
                     for inputs, masks, targets in self.retain_loader:
@@ -371,7 +371,7 @@ class DefenderOPT(nn.Module):
                     u_a = att_lik * self.attacker_strength * (B / N)
                     u_a.backward()
                 optimizer.step()
-            scheduler.step()
+            # scheduler.step()
             ## revert the lr back
             self._set_lr(optimizer, new_lr=self.defender_lr)
             ## time in minutes (excluding evaluation, etc.)
@@ -388,40 +388,71 @@ class DefenderOPT(nn.Module):
             forget_accuracy = self._evaluate_accuracy(
                 net, self.forget_loader, device=self.device
             )
-            MIA_accuracy, MIA_recall, MIA_auc = DefenderOPT._evaluate_MIA(
-                net,
-                self.forget_loader,
-                self.val_loader,
-                dim=self.dim,
-                device=self.device,
-                seed=self.seed,
-            )
-            print(
-                f"Epoch [{epoch+1}/{self.num_epoch}], ",
-                f"U_d: {u_d.item():.4f}, ",
-                f"U_a: {u_a.item():.4f}, " if self.with_attacker else f"U_a: None, ",
-                f"test accuracy: {test_accuracy:.4f}, ",
-                f"forget accuracy: {forget_accuracy:.4f}, ",
-                f"retain accuracy: {retain_accuracy:.4f}, ",
-                (
-                    f"att accuracy: {att_acc.item():.4f}, "
-                    if self.with_attacker
-                    else f"att accuracy: None, "
-                ),
-                f"MIA accuracy: {MIA_accuracy.item():.4f}, ",
-                f"MIA auc: {MIA_auc.item():.4f}, ",
-                f"MIA recall: {MIA_recall.item():.4f}, ",
-                f"Attacker lr: {self.attacker_lr:.4f}, ",
-                f"Defender lr: {self.defender_lr:.4f}, ",
-                f"attack str: {self.attacker_strength}",
-                f"SG_base_method: {self.SG_base_method}",
-            )
+            # if epoch == self.num_epoch - 1:
+            if True:
+                MIA_accuracy, MIA_recall, MIA_auc, MIA_F1 = DefenderOPT._evaluate_MIA(
+                    net,
+                    self.forget_loader,
+                    self.val_loader,
+                    dim=self.dim,
+                    device=self.device,
+                    seed=self.seed,
+                )
+                print(
+                    f"Epoch [{epoch+1}/{self.num_epoch}], ",
+                    f"U_d: {u_d.item():.4f}, ",
+                    (
+                        f"U_a: {u_a.item():.4f}, "
+                        if self.with_attacker
+                        else f"U_a: None, "
+                    ),
+                    f"test accuracy: {test_accuracy:.4f}, ",
+                    f"forget accuracy: {forget_accuracy:.4f}, ",
+                    f"retain accuracy: {retain_accuracy:.4f}, ",
+                    (
+                        f"att accuracy: {att_acc.item():.4f}, "
+                        if self.with_attacker
+                        else f"att accuracy: None, "
+                    ),
+                    f"MIA accuracy: {MIA_accuracy.item():.4f}, ",
+                    f"MIA auc: {MIA_auc.item():.4f}, ",
+                    f"MIA recall: {MIA_recall.item():.4f}, ",
+                    f"MIA_F1: {MIA_F1.item():.4f}, "
+                    f"Attacker lr: {self.attacker_lr:.4f}, ",
+                    f"Defender lr: {self.defender_lr:.4f}, ",
+                    f"attack str: {self.attacker_strength}",
+                    f"SG_base_method: {self.SG_base_method}",
+                )
+                # if self.save_checkpoint and (epoch + 1) % 5 == 0:
+                self._save_ckpt(net, epoch + 1)
+            else:
+                print(
+                    f"Epoch [{epoch+1}/{self.num_epoch}], ",
+                    f"U_d: {u_d.item():.4f}, ",
+                    (
+                        f"U_a: {u_a.item():.4f}, "
+                        if self.with_attacker
+                        else f"U_a: None, "
+                    ),
+                    f"test accuracy: {test_accuracy:.4f}, ",
+                    f"forget accuracy: {forget_accuracy:.4f}, ",
+                    f"retain accuracy: {retain_accuracy:.4f}, ",
+                    (
+                        f"att accuracy: {att_acc.item():.4f}, "
+                        if self.with_attacker
+                        else f"att accuracy: None, "
+                    ),
+                    f"MIA accuracy: 0.0, ",
+                    f"MIA auc: 0.0, ",
+                    f"MIA recall: 0.0, ",
+                    f"Attacker lr: {self.attacker_lr:.4f}, ",
+                    f"Defender lr: {self.defender_lr:.4f}, ",
+                    f"attack str: {self.attacker_strength}",
+                    f"SG_base_method: {self.SG_base_method}",
+                )
             print(
                 f"time/epoch: {t_all:.4f} min; attacker opt: {t_att:.4f} ({t_att/t_all:.2f})"
             )
-
-            if self.save_checkpoint and (epoch + 1) % 5 == 0:
-                self._save_ckpt(net, epoch + 1)
 
     @staticmethod
     def _generate_scores(
@@ -618,7 +649,13 @@ class DefenderOPT(nn.Module):
         MIA_auc = cross_val_score(
             attack_model, all_scores, all_members, cv=cv, scoring="roc_auc"
         ).mean()
-        return (MIA_accuracy, MIA_recall, MIA_auc)
+        # MIA_auc = cross_val_score(
+        #     attack_model, all_scores, all_members, cv=cv, scoring="roc_auc"
+        # ).mean()
+        MIA_f1 = cross_val_score(
+            attack_model, all_scores, all_members, cv=cv, scoring="f1"
+        ).mean()
+        return (MIA_accuracy, MIA_recall, MIA_auc, MIA_f1)
 
     def _classwise_processing(self, data, targets, forget_classes):
         ## remove the data from the `forget class`

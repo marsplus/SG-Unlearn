@@ -52,7 +52,27 @@ def main(args):
     DEVICE = f"cuda:{args.device_id}" if torch.cuda.is_available() else "cpu"
     ## download and pre-process CIFAR10
     if args.dataset == "cifar10":
-        transform = transforms.Compose(
+        if args.augmentation:
+            transform_train = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                    ),
+                    transforms.RandomCrop(32, padding=4),
+                    transforms.RandomHorizontalFlip(),
+                ]
+            )
+        else:
+            transform_train = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                    ),
+                ]
+            )
+        transform_test = transforms.Compose(
             [
                 transforms.ToTensor(),
                 transforms.Normalize(
@@ -71,12 +91,22 @@ def main(args):
             0.2564384629170883,
             0.27615047132568404,
         )
-        transform_train = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize(CIFAR100_TRAIN_MEAN, CIFAR100_TRAIN_STD),
-            ]
-        )
+        if args.augmentation:
+            transform_train = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize(CIFAR100_TRAIN_MEAN, CIFAR100_TRAIN_STD),
+                    transforms.RandomCrop(32, padding=4),
+                    transforms.RandomHorizontalFlip(),
+                ]
+            )
+        else:
+            transform_train = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize(CIFAR100_TRAIN_MEAN, CIFAR100_TRAIN_STD),
+                ]
+            )
 
         transform_test = transforms.Compose(
             [
@@ -91,22 +121,30 @@ def main(args):
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
                 transforms.Normalize(
-                    (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
-                ),
+                    (0.4377, 0.4438, 0.4728),
+                    (0.1980, 0.2010, 0.1970)
+                )
+                # transforms.Normalize(
+                #     (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                # ),
             ]
         )
         transform_test = transforms.Compose(
             [
                 transforms.ToTensor(),
                 transforms.Normalize(
-                    (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
-                ),
+                    (0.4377, 0.4438, 0.4728),
+                    (0.1980, 0.2010, 0.1970)
+                )
+                # transforms.Normalize(
+                #     (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+                # ),
             ]
         )
 
     if args.dataset == "cifar10":
         train_set = torchvision.datasets.CIFAR10(
-            root="../data", train=True, download=True, transform=transform
+            root="../data", train=True, download=True, transform=transform_train
         )
         train_loader = DataLoader(
             train_set,
@@ -115,7 +153,7 @@ def main(args):
             num_workers=num_workers,
         )
         held_out = torchvision.datasets.CIFAR10(
-            root="../data", train=False, download=True, transform=transform
+            root="../data", train=False, download=True, transform=transform_test
         )
         args.num_class = 10
     elif args.dataset == "cifar100":
@@ -384,6 +422,7 @@ if __name__ == "__main__":
     parser.add_argument("--mem_save", type=int, default=20)
     parser.add_argument("--classwise", type=int, default=0)
     parser.add_argument("--SG_base_method", type=str, default="FT")
+    parser.add_argument("--augmentation", action="store_true", default=False)
     args = parser.parse_args()
 
     RNG = torch.Generator().manual_seed(args.seed)
