@@ -777,6 +777,14 @@ class DefenderOPT(nn.Module):
             all_scores_numpy = all_scores.detach().cpu().numpy()[:, np.newaxis]
             all_clas_numpy = all_clas.detach().cpu().numpy()[:, np.newaxis]
 
+        ## an ad-hoc fix to remove these classes with less than two samples
+        if self.classwise:
+            clas, cnts = np.unique(all_clas_numpy.squeeze(), return_counts=True)
+            to_remove_clas = np.where(cnts < 2)[0]
+            mask = (~np.isin(all_clas_numpy, to_remove_clas))
+            all_scores_numpy = all_scores_numpy[mask]
+            all_clas_numpy   = all_clas_numpy[mask]
+
         ## aggregate the attacker's likelihood across k-fold cross validation
         total_lik = torch.zeros(1, device=self.device)
         total_acc = torch.zeros(1, device=self.device)
