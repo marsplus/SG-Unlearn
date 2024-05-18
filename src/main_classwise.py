@@ -147,7 +147,7 @@ def main(args):
         assert args.forget_class in range(
             10
         ), "The forgetting class should in the range."
-        class_id = np.where(np.array(train_set.targets) == int(args.forget_class))[0]
+        class_id = np.where(np.array(train_set.targets) != int(args.forget_class))[0]
         train_set_wo_class = Data.Subset(train_set, class_id)
         train_loader = DataLoader(
             train_set_wo_class,
@@ -159,7 +159,7 @@ def main(args):
             root="../data", train=False, download=True, transform=transform_test
         )
         held_out_class_id = np.where(
-            np.array(held_out.targets) == int(args.forget_class)
+            np.array(held_out.targets) != int(args.forget_class)
         )[0]
         held_out_wo_class = Data.Subset(held_out, held_out_class_id)
         args.num_class = 10
@@ -170,7 +170,7 @@ def main(args):
         assert args.forget_class in range(
             100
         ), "The forgetting class should in the range."
-        class_id = np.where(np.array(train_set.targets) == int(args.forget_class))[0]
+        class_id = np.where(np.array(train_set.targets) != int(args.forget_class))[0]
         train_set_wo_class = Data.Subset(train_set, class_id)
         train_loader = DataLoader(
             train_set_wo_class,
@@ -182,7 +182,7 @@ def main(args):
             root="../data", train=False, download=True, transform=transform_test
         )
         held_out_class_id = np.where(
-            np.array(held_out.targets) == int(args.forget_class)
+            np.array(held_out.targets) != int(args.forget_class)
         )[0]
         held_out_wo_class = Data.Subset(held_out, held_out_class_id)
         args.num_class = 100
@@ -193,7 +193,7 @@ def main(args):
         assert args.forget_class in range(
             10
         ), "The forgetting class should in the range."
-        class_id = np.where(np.array(train_set.targets) == int(args.forget_class))[0]
+        class_id = np.where(np.array(train_set.targets) != int(args.forget_class))[0]
         train_set_wo_class = Data.Subset(train_set, class_id)
         train_loader = DataLoader(
             train_set_wo_class,
@@ -205,7 +205,7 @@ def main(args):
             "../data", split="test", transform=transform_test, download=True
         )
         held_out_class_id = np.where(
-            np.array(held_out.targets) == int(args.forget_class)
+            np.array(held_out.targets) != int(args.forget_class)
         )[0]
         held_out_wo_class = Data.Subset(held_out, held_out_class_id)
         args.num_class = 10
@@ -302,7 +302,7 @@ def main(args):
             val_set, batch_size=adv_batch_size, shuffle=True, num_workers=num_workers
         )
         ## construct retain and forget sets
-        forget_set, retain_set = random_split(train_set, [0.1, 0.9], generator=RNG)
+        forget_set, retain_set = random_split(train_set_wo_class, [0.1, 0.9], generator=RNG)
         forget_loader = torch.utils.data.DataLoader(
             forget_set,
             batch_size=adv_batch_size,
