@@ -147,8 +147,10 @@ def main(args):
         assert args.forget_class in range(
             10
         ), "The forgetting class should in the range."
-        class_id = np.where(np.array(train_set.targets) != int(args.forget_class))[0]
-        train_set_wo_class = Data.Subset(train_set, class_id)
+        class_ids = np.where(np.array(train_set.targets) != int(args.forget_class))[0]
+        class_id = np.where(np.array(train_set.targets) == int(args.forget_class))[0]
+        train_set_wo_class = Data.Subset(train_set, class_ids)
+        train_set_class = Data.Subset(train_set, class_id)
         train_loader = DataLoader(
             train_set_wo_class,
             batch_size=args.batch_size,
@@ -170,8 +172,10 @@ def main(args):
         assert args.forget_class in range(
             100
         ), "The forgetting class should in the range."
-        class_id = np.where(np.array(train_set.targets) != int(args.forget_class))[0]
-        train_set_wo_class = Data.Subset(train_set, class_id)
+        class_ids = np.where(np.array(train_set.targets) != int(args.forget_class))[0]
+        class_id = np.where(np.array(train_set.targets) == int(args.forget_class))[0]
+        train_set_wo_class = Data.Subset(train_set, class_ids)
+        train_set_class = Data.Subset(train_set, class_id)
         train_loader = DataLoader(
             train_set_wo_class,
             batch_size=args.batch_size,
@@ -193,8 +197,10 @@ def main(args):
         assert args.forget_class in range(
             10
         ), "The forgetting class should in the range."
-        class_id = np.where(np.array(train_set.targets) != int(args.forget_class))[0]
-        train_set_wo_class = Data.Subset(train_set, class_id)
+        class_ids = np.where(np.array(train_set.targets) != int(args.forget_class))[0]
+        class_id = np.where(np.array(train_set.targets) == int(args.forget_class))[0]
+        train_set_wo_class = Data.Subset(train_set, class_ids)
+        train_set_class = Data.Subset(train_set, class_id)
         train_loader = DataLoader(
             train_set_wo_class,
             batch_size=args.batch_size,
@@ -302,16 +308,16 @@ def main(args):
             val_set, batch_size=adv_batch_size, shuffle=True, num_workers=num_workers
         )
         ## construct retain and forget sets
-        forget_set, retain_set = random_split(train_set_wo_class, [0.1, 0.9], generator=RNG)
+        # forget_set, retain_set = random_split(train_set_wo_class, [0.1, 0.9], generator=RNG)
         forget_loader = torch.utils.data.DataLoader(
-            forget_set,
+            train_set_class,
             batch_size=adv_batch_size,
             shuffle=True,
             num_workers=num_workers,
             generator=RNG,
         )
         retain_loader = torch.utils.data.DataLoader(
-            retain_set,
+            train_set_wo_class,
             batch_size=args.batch_size,
             shuffle=True,
             num_workers=num_workers,
