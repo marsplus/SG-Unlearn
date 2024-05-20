@@ -24,12 +24,116 @@ from transformers import AutoModel, AutoTokenizer
 import utils_20ng
 from models import DefenderOPT
 from utils import random_split
+import copy
 
 warnings.simplefilter(action="ignore", category=Warning)
 
 
 # DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+cifar20_labels = {
+    0: 4,
+    1: 1,
+    2: 14,
+    3: 8,
+    4: 0,
+    5: 6,
+    6: 7,
+    7: 7,
+    8: 18,
+    9: 3,
+    10: 3,
+    11: 14,
+    12: 9,
+    13: 18,
+    14: 7,
+    15: 11,
+    16: 3,
+    17: 9,
+    18: 7,
+    19: 11,
+    20: 6,
+    21: 11,
+    22: 5,
+    23: 10,
+    24: 7,
+    25: 6,
+    26: 13,
+    27: 15,
+    28: 3,
+    29: 15,
+    30: 0,
+    31: 11,
+    32: 1,
+    33: 10,
+    34: 12,
+    35: 14,
+    36: 16,
+    37: 9,
+    38: 11,
+    39: 5,
+    40: 5,
+    41: 19,
+    42: 8,
+    43: 8,
+    44: 15,
+    45: 13,
+    46: 14,
+    47: 17,
+    48: 18,
+    49: 10,
+    50: 16,
+    51: 4,
+    52: 17,
+    53: 4,
+    54: 2,
+    55: 0,
+    56: 17,
+    57: 4,
+    58: 18,
+    59: 17,
+    60: 10,
+    61: 3,
+    62: 2,
+    63: 12,
+    64: 12,
+    65: 16,
+    66: 12,
+    67: 1,
+    68: 9,
+    69: 19,
+    70: 2,
+    71: 10,
+    72: 0,
+    73: 1,
+    74: 16,
+    75: 12,
+    76: 9,
+    77: 13,
+    78: 15,
+    79: 13,
+    80: 16,
+    81: 19,
+    82: 2,
+    83: 4,
+    84: 6,
+    85: 19,
+    86: 5,
+    87: 5,
+    88: 8,
+    89: 19,
+    90: 18,
+    91: 1,
+    92: 2,
+    93: 15,
+    94: 6,
+    95: 0,
+    96: 17,
+    97: 8,
+    98: 14,
+    99: 13,
+}
 
 
 class BertClassifier(torch.nn.Module):
@@ -80,7 +184,7 @@ def main(args):
                 ),
             ]
         )
-    elif args.dataset == "cifar100":
+    elif args.dataset == "cifar100" or args.dataset == "cifar20":
         CIFAR100_TRAIN_MEAN = (
             0.5070751592371323,
             0.48654887331495095,
@@ -121,9 +225,8 @@ def main(args):
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
                 transforms.Normalize(
-                    (0.4377, 0.4438, 0.4728),
-                    (0.1980, 0.2010, 0.1970)
-                )
+                    (0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970)
+                ),
                 # transforms.Normalize(
                 #     (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
                 # ),
@@ -133,9 +236,8 @@ def main(args):
             [
                 transforms.ToTensor(),
                 transforms.Normalize(
-                    (0.4377, 0.4438, 0.4728),
-                    (0.1980, 0.2010, 0.1970)
-                )
+                    (0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970)
+                ),
                 # transforms.Normalize(
                 #     (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
                 # ),
@@ -170,6 +272,25 @@ def main(args):
             root="../data", train=False, download=True, transform=transform_test
         )
         args.num_class = 100
+    elif args.dataset == "cifar20":
+        train_set = torchvision.datasets.CIFAR100(
+            root="../data", train=True, download=True, transform=transform_train
+        )
+        # train_set.super_label = [cifar20_labels[i] for i in train_set.targets]
+        train_set.ori_targets = copy.deepcopy(train_set.targets)
+        train_set.targets = [cifar20_labels[i] for i in train_set.ori_targets]
+        train_loader = DataLoader(
+            train_set,
+            batch_size=args.batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+        )
+        held_out = torchvision.datasets.CIFAR100(
+            root="../data", train=False, download=True, transform=transform_test
+        )
+        held_out.ori_targets = copy.deepcopy(held_out.targets)
+        held_out.targets = [cifar20_labels[i] for i in held_out.ori_targets]
+        args.num_class = 20
     elif args.dataset == "svhn":
         train_set = torchvision.datasets.SVHN(
             "../data", split="train", transform=transform_train, download=True
@@ -276,8 +397,14 @@ def main(args):
         val_loader = DataLoader(
             val_set, batch_size=adv_batch_size, shuffle=True, num_workers=num_workers
         )
-        ## construct retain and forget sets
-        forget_set, retain_set = random_split(train_set, [0.1, 0.9], generator=RNG)
+        if args.dataset == "cifar20":
+            forget_idx = np.where(np.array(train_set.ori_targets) == 0)[0]
+            retain_idx = np.where(np.array(train_set.ori_targets) != 0)[0]
+            forget_set = Data.Subset(train_set, forget_idx)
+            retain_set = Data.Subset(train_set, retain_idx)
+        else:
+            ## construct retain and forget sets
+            forget_set, retain_set = random_split(train_set, [0.1, 0.9], generator=RNG)
         forget_loader = torch.utils.data.DataLoader(
             forget_set,
             batch_size=adv_batch_size,
@@ -333,6 +460,8 @@ def main(args):
             )
         elif args.dataset == "20ng":
             local_path = os.path.join(ROOT_DIR, "../models/checkpoint.pth")
+        elif args.dataset == "cifar20":
+            local_path = "/code/Unlearn-Bench/examples/results/CIFAR20/ResNet18/EmpiricalRiskMinimization/pretrain/name_vanilla_train_seed_2/pretrain_checkpoint.pt"
         else:
             raise ValueError("Unknow dataset.\n")
     elif args.arch == "Bert":
