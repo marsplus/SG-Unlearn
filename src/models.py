@@ -758,32 +758,19 @@ class DefenderOPT(nn.Module):
 
         # shuffle the data
         idx = torch.randperm(all_scores.shape[0])
-        all_scores = all_scores[idx]
-        all_members = all_members[idx]
-        all_clas = all_clas[idx]
-        (
-            all_scores.to(self.device),
-            all_members.to(self.device),
-            all_clas.to(self.device),
-        )
+        all_scores = all_scores[idx].to(self.device)
+        all_members = all_members[idx].to(self.device)
+        all_clas = all_clas[idx].to(self.device)
 
-        ## below is just to handle platform issues
-        if int(torch.__version__[0]) > int(REF_VERSION[0]) or int(
-            torch.__version__.split(".")[1]
-        ) >= int(REF_VERSION.split(".")[1]):
-            all_scores_numpy = all_scores.numpy(force=True)[:, np.newaxis]
-            all_clas_numpy = all_clas.numpy(force=True)[:, np.newaxis]
-        else:
-            all_scores_numpy = all_scores.detach().cpu().numpy()[:, np.newaxis]
-            all_clas_numpy = all_clas.detach().cpu().numpy()[:, np.newaxis]
+        all_scores_numpy = all_scores.detach().cpu().numpy()
+        all_clas_numpy = all_clas.detach().cpu().numpy()
 
         ## an ad-hoc fix to remove these classes with less than two samples
-        if self.classwise:
-            clas, cnts = np.unique(all_clas_numpy.squeeze(), return_counts=True)
-            to_remove_clas = np.where(cnts < 2)[0]
-            mask = (~np.isin(all_clas_numpy, to_remove_clas))
-            all_scores_numpy = all_scores_numpy[mask]
-            all_clas_numpy   = all_clas_numpy[mask]
+        clas, cnts = np.unique(all_clas_numpy, return_counts=True)
+        to_remove_clas = np.where(cnts < 2)[0]
+        mask = (~np.isin(all_clas_numpy, to_remove_clas))
+        all_scores_numpy = all_scores_numpy[mask].copy()
+        all_clas_numpy   = all_clas_numpy[mask].copy()
 
         ## aggregate the attacker's likelihood across k-fold cross validation
         total_lik = torch.zeros(1, device=self.device)
@@ -791,9 +778,8 @@ class DefenderOPT(nn.Module):
         for fold, (train_indices, test_indices) in enumerate(
             self.kf.split(all_scores_numpy, all_clas_numpy)
         ):
-            train_indices = torch.from_numpy(train_indices)
-            test_indices = torch.from_numpy(test_indices)
-            train_indices.to(self.device), test_indices.to(self.device)
+            train_indices = torch.from_numpy(train_indices).to(self.device)
+            test_indices = torch.from_numpy(test_indices).to(self.device)
             X_tr, y_tr, y_clas_tr = (
                 all_scores[train_indices],
                 all_members[train_indices],
