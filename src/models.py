@@ -301,6 +301,9 @@ class DefenderOPT(nn.Module):
                         inputs, targets = (
                             inputs.to(self.device),
                             targets.to(self.device),
+                        inputs, targets = (
+                            inputs.to(self.device),
+                            targets.to(self.device),
                         )
                         optimizer.zero_grad()
                         outputs = net(inputs)
@@ -309,6 +312,9 @@ class DefenderOPT(nn.Module):
                         optimizer.step()
                 elif self.SG_base_method == "RL":
                     for inputs, targets in self.unlearn_loader:
+                        inputs, targets = (
+                            inputs.to(self.device),
+                            targets.to(self.device),
                         inputs, targets = (
                             inputs.to(self.device),
                             targets.to(self.device),
@@ -595,14 +601,8 @@ class DefenderOPT(nn.Module):
         all_scores = torch.cat(all_scores, axis=0)
         all_members = torch.cat(all_members, axis=0)
 
-        if int(torch.__version__[0]) > int(REF_VERSION[0]) or int(
-            torch.__version__.split(".")[1]
-        ) >= int(REF_VERSION.split(".")[1]):
-            all_scores = all_scores.numpy(force=True)
-            all_members = all_members.numpy(force=True)
-        else:
-            all_scores = all_scores.detach().cpu().numpy()
-            all_members = all_members.detach().cpu().numpy()
+        all_scores = all_scores.detach().cpu().numpy()
+        all_members = all_members.detach().cpu().numpy()
 
         unique_members = np.unique(all_members)
         if not np.all(unique_members == np.array([0, 1])):
@@ -732,15 +732,17 @@ class DefenderOPT(nn.Module):
             all_clas.to(self.device),
         )
 
-        ## below is just to handle platform issues
-        if int(torch.__version__[0]) > int(REF_VERSION[0]) or int(
-            torch.__version__.split(".")[1]
-        ) >= int(REF_VERSION.split(".")[1]):
-            all_scores_numpy = all_scores.numpy(force=True)[:, np.newaxis]
-            all_clas_numpy = all_clas.numpy(force=True)[:, np.newaxis]
-        else:
-            all_scores_numpy = all_scores.detach().cpu().numpy()[:, np.newaxis]
-            all_clas_numpy = all_clas.detach().cpu().numpy()[:, np.newaxis]
+        ## an ad-hoc fix to remove these classes with less than two samples
+        clas, cnts = np.unique(all_clas_numpy, return_counts=True)
+        to_remove_clas = clas[cnts < 2]
+        mask = ~np.isin(all_clas_numpy, to_remove_clas)
+        all_scores_numpy = all_scores_numpy[mask]
+        all_clas_numpy = all_clas_numpy[mask]
+
+        mask_tensor = torch.from_numpy(mask).to(self.device)
+        all_scores = all_scores[mask_tensor]
+        all_members = all_members[mask_tensor]
+        all_clas = all_clas[mask_tensor]
 
         ## aggregate the attacker's likelihood across k-fold cross validation
         total_lik = torch.zeros(1, device=self.device)
@@ -810,12 +812,7 @@ class DefenderOPT(nn.Module):
         beta = cp.Variable((n_feature, 1))
         b = cp.Variable()
         data = cp.Parameter((n_sample, n_feature))
-        if int(torch.__version__[0]) > int(REF_VERSION[0]) or int(
-            torch.__version__.split(".")[1]
-        ) >= int(REF_VERSION.split(".")[1]):
-            Y = 2 * y_tr.numpy(force=True)[:, np.newaxis] - 1
-        else:
-            Y = 2 * y_tr.detach().cpu().numpy()[:, np.newaxis] - 1
+        Y = 2 * y_tr.detach().cpu().numpy()[:, np.newaxis] - 1
         ## margin loss
         loss = cp.sum(cp.pos(1 - cp.multiply(Y, data @ beta - b)))
         reg = self.attacker_reg * cp.norm(beta, 1)
