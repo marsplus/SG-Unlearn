@@ -301,6 +301,7 @@ class DefenderOPT(nn.Module):
                         inputs, targets = (
                             inputs.to(self.device),
                             targets.to(self.device),
+                        )
                         inputs, targets = (
                             inputs.to(self.device),
                             targets.to(self.device),
@@ -315,6 +316,7 @@ class DefenderOPT(nn.Module):
                         inputs, targets = (
                             inputs.to(self.device),
                             targets.to(self.device),
+                        )
                         inputs, targets = (
                             inputs.to(self.device),
                             targets.to(self.device),
@@ -732,6 +734,9 @@ class DefenderOPT(nn.Module):
             all_clas.to(self.device),
         )
 
+        all_scores_numpy = all_scores.detach().cpu().numpy()
+        all_clas_numpy = all_clas.detach().cpu().numpy()
+        
         ## an ad-hoc fix to remove these classes with less than two samples
         clas, cnts = np.unique(all_clas_numpy, return_counts=True)
         to_remove_clas = clas[cnts < 2]
@@ -752,7 +757,10 @@ class DefenderOPT(nn.Module):
         ):
             train_indices = torch.from_numpy(train_indices)
             test_indices = torch.from_numpy(test_indices)
-            train_indices, test_indices = train_indices.to(self.device), test_indices.to(self.device)
+            train_indices, test_indices = (
+                train_indices.to(self.device),
+                test_indices.to(self.device),
+            )
             X_tr, y_tr, y_clas_tr = (
                 all_scores[train_indices],
                 all_members[train_indices],

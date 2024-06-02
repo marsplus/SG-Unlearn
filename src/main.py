@@ -381,7 +381,7 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, default=".")
     parser.add_argument("--save_checkpoint", type=int, default=0)
     parser.add_argument("--model_path", type=str, default=None)
-    parser.add_argument("--mem_save", type=int, default=20)
+    parser.add_argument("--mem_save", type=int, default=5)
     parser.add_argument("--classwise", type=int, default=0)
     parser.add_argument("--SG_base_method", type=str, default="FT")
     args = parser.parse_args()
