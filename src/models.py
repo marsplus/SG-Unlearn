@@ -726,7 +726,7 @@ class DefenderOPT(nn.Module):
         all_scores = all_scores[idx]
         all_members = all_members[idx]
         all_clas = all_clas[idx]
-        (
+        all_scores, all_members, all_clas = (
             all_scores.to(self.device),
             all_members.to(self.device),
             all_clas.to(self.device),
@@ -750,7 +750,7 @@ class DefenderOPT(nn.Module):
         ):
             train_indices = torch.from_numpy(train_indices)
             test_indices = torch.from_numpy(test_indices)
-            train_indices.to(self.device), test_indices.to(self.device)
+            train_indices, test_indices = train_indices.to(self.device), test_indices.to(self.device)
             X_tr, y_tr, y_clas_tr = (
                 all_scores[train_indices],
                 all_members[train_indices],
