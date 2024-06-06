@@ -1,7 +1,7 @@
 import logging
 import os
 import pdb
-import pickle
+import pickle as pkl
 import sys
 import time
 
@@ -137,6 +137,8 @@ class DefenderOPT(nn.Module):
         save_checkpoint: bool = True,
         classwise: bool = False,
         SG_base_method: str = "FT",
+        file_name: str = "retrain",
+        dataset: str = "cifar10",
     ):
         """
         dim: the dimension of the score vectors.
@@ -176,6 +178,8 @@ class DefenderOPT(nn.Module):
         self.save_checkpoint = save_checkpoint
         self.classwise = classwise
         self.SG_base_method = SG_base_method
+        self.file_name = file_name
+        self.dataset = dataset
 
         ## cross-validation split used in the attacker's optimization
         ## it's initialized here for having consistent number of train/test data
@@ -247,23 +251,60 @@ class DefenderOPT(nn.Module):
             retain_accuracy = self._evaluate_accuracy(
                 net, self.retain_loader, device=self.device
             )
-            MIA_accuracy, MIA_recall, MIA_auc, MIA_f1 = DefenderOPT._evaluate_MIA(
-                net,
-                self.forget_loader,
-                self.val_loader,
-                dim=self.dim,
-                device=self.device,
-                seed=self.seed,
+            val_accuracy = self._evaluate_accuracy(
+                net, self.val_loader, device=self.device
             )
+            # MIA_accuracy, MIA_recall, MIA_auc, MIA_f1 = DefenderOPT._evaluate_MIA(
+            #     net,
+            #     self.forget_loader,
+            #     self.val_loader,
+            #     dim=self.dim,
+            #     device=self.device,
+            #     seed=self.seed,
+            # )
             print(
                 f"test accuracy: {test_accuracy:.4f}, "
                 f"forget accuracy: {forget_accuracy:.4f}, "
                 f"retain accuracy: {retain_accuracy:.4f}, "
-                f"MIA accuracy: {MIA_accuracy.item():.4f}, "
-                f"MIA auc: {MIA_auc.item():.4f}, "
-                f"MIA recall: {MIA_recall.item():.4f}, "
-                f"MIA f1: {MIA_f1.item():.4f}"
+                f"val accuracy: {val_accuracy:.4f}, "
+                # f"MIA accuracy: {MIA_accuracy.item():.4f}, "
+                # f"MIA auc: {MIA_auc.item():.4f}, "
+                # f"MIA recall: {MIA_recall.item():.4f}, "
+                # f"MIA f1: {MIA_f1.item():.4f}"
             )
+            SG_data = {
+                "retain": self.retain_loader.dataset,
+                "val": self.val_loader.dataset,
+                "forget": self.forget_loader.dataset,
+                "test": self.test_loader.dataset,
+            }
+            # eval_ret = evaluate_model(net, SG_data, seed=self.seed, device=self.device)
+            test_loss = self._get_loss(net, self.test_loader, device=self.device)
+            forget_loss = self._get_loss(net, self.forget_loader, device=self.device)
+            loss = {
+                "test_loss": np.array(test_loss),
+                "forget_loss": np.array(forget_loss),
+            }
+            # print(eval_ret)
+            if self.classwise:
+                loss_name = f"./{self.dataset}_class_loss/{self.dataset}_class_{self.file_name}.pkl"
+            else:
+                loss_name = f"./{self.dataset}_loss/{self.dataset}_{self.file_name}.pkl"
+            print(loss_name, self.dataset, self.classwise, self.file_name)
+            with open(loss_name, "wb") as f:
+                pkl.dump(loss, f)
+
+            return
+            # print(
+            #     f"test accuracy: {test_accuracy:.4f}, "
+            #     f"forget accuracy: {forget_accuracy:.4f}, "
+            #     f"retain accuracy: {retain_accuracy:.4f}, "
+            #     f"val accuracy: {val_accuracy:.4f}, "
+            #     f"MIA accuracy: {MIA_accuracy.item():.4f}, "
+            #     f"MIA auc: {MIA_auc.item():.4f}, "
+            #     f"MIA recall: {MIA_recall.item():.4f}, "
+            #     f"MIA f1: {MIA_f1.item():.4f}"
+            # )
             epoch = 0
             self._save_ckpt(net, epoch)
             return net
@@ -518,6 +559,27 @@ class DefenderOPT(nn.Module):
         """
         for param_group in optimizer.param_groups:
             param_group["lr"] = new_lr
+
+    @staticmethod
+    @torch.no_grad()
+    def _get_loss(net, eval_loader: DataLoader = None, device="cpu"):
+        """
+        A template code to evaluate a model's accuracy on a dataset.
+        """
+        net.eval()
+        losses = []
+        criterion = nn.CrossEntropyLoss(reduction="none")
+        for data in eval_loader:
+            if len(data) == 2:
+                inputs, targets = data
+                outputs = net(inputs.to(device))
+            else:
+                inputs, masks, targets = data
+                outputs = net(inputs.to(device), masks.to(device))
+            targets = targets.to(device)
+            loss = criterion(outputs, targets).detach().cpu().numpy().tolist()
+            losses.extend(loss)
+        return losses
 
     @staticmethod
     @torch.no_grad()
@@ -779,11 +841,12 @@ class DefenderOPT(nn.Module):
 
         ## an ad-hoc fix to remove these classes with less than two samples
         if self.classwise:
+            print("Preprocessing Data!!!")
             clas, cnts = np.unique(all_clas_numpy.squeeze(), return_counts=True)
             to_remove_clas = np.where(cnts < 2)[0]
-            mask = (~np.isin(all_clas_numpy, to_remove_clas))
+            mask = ~np.isin(all_clas_numpy, to_remove_clas)
             all_scores_numpy = all_scores_numpy[mask]
-            all_clas_numpy   = all_clas_numpy[mask]
+            all_clas_numpy = all_clas_numpy[mask]
 
         ## aggregate the attacker's likelihood across k-fold cross validation
         total_lik = torch.zeros(1, device=self.device)

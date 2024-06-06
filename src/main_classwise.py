@@ -418,6 +418,8 @@ def main(args):
         save_checkpoint=args.save_checkpoint,
         classwise=args.classwise,
         SG_base_method=args.SG_base_method,
+        file_name=args.file_name,
+        dataset=args.dataset
     )
     defender.unlearn(model_ft)
 
@@ -458,6 +460,7 @@ if __name__ == "__main__":
     parser.add_argument("--SG_base_method", type=str, default="FT")
     parser.add_argument("--augmentation", action="store_true", default=False)
     parser.add_argument("--forget_class", type=int, default=0)
+    parser.add_argument("--file_name", type=str, default="retrain")
     args = parser.parse_args()
 
     RNG = torch.Generator().manual_seed(args.seed)
