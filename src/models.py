@@ -1,21 +1,15 @@
-import logging
 import os
-import pdb
-import pickle
-import sys
 import time
 
 import cvxpy as cp
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 from cvxpylayers.torch import CvxpyLayer
 
 # from memory_profiler import profile
 from sklearn.model_selection import (
-    StratifiedKFold,
     StratifiedShuffleSplit,
     cross_val_score,
 )
@@ -23,7 +17,7 @@ from sklearn.svm import LinearSVC
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
 
 from evaluate import evaluate_model
-from utils import BinaryClassificationDataset, wasserstein_distance_1d
+from utils import BinaryClassificationDataset
 
 # from qpth.qp import QPFunction
 
@@ -31,7 +25,6 @@ from utils import BinaryClassificationDataset, wasserstein_distance_1d
 # self.device = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_ATTACKER = 0
 REF_VERSION = "1.13.1"
-from torch.utils.model_zoo import load_url as load_state_dict_from_url
 
 
 # An MLP class for debugging purposes
@@ -64,46 +57,6 @@ class ReLabelDataset(Dataset):
         datas = list(self.original_dataset[index])
         datas[-1] = self.new_labels[index]
         return tuple(datas)
-
-
-# def step(self, remain_loader, forget_loader):
-#     remain_set = remain_loader.dataset
-#     forget_set = forget_loader.dataset
-
-#     label_type = type(remain_set[0][-1])
-#     new_label = np.random.randint(self.num_classes - 1, size=len(forget_set))
-
-#     for i in range(len(forget_set)):
-#         if new_label[i] >= forget_set[i][-1]:
-#             new_label[i] += 1
-
-#     if label_type == torch.Tensor:
-#         new_label = torch.tensor(new_label, dtype=torch.long)
-#     elif label_type == np.ndarray:
-#         new_label = np.array(new_label, dtype=np.int64)
-#     else:
-#         pass
-
-#     new_forget_set = ReLabelDataset(forget_set, new_label)
-#     unlearn_set = ConcatDataset([remain_set, new_forget_set])
-#     unlearn_loader = DataLoader(unlearn_set, **self.loader_kwargs)
-
-#     optimizer = torch.optim.SGD(self.model.parameters(), self.lr)
-
-#     self.model.train()
-
-#     import tqdm
-
-#     for epoch in tqdm.trange(self.epoch, desc=f"{self.__class__.__name__}"):
-#         for batch in unlearn_loader:
-#             batch = [data.to(self.model.device) for data in batch]
-#             input = batch[:-1]
-#             label = batch[-1]
-
-#             optimizer.zero_grad()
-#             loss = self.model.criterion(self.model(*input), label)
-#             loss.backward()
-#             optimizer.step()
 
 
 class DefenderOPT(nn.Module):
@@ -736,7 +689,7 @@ class DefenderOPT(nn.Module):
 
         all_scores_numpy = all_scores.detach().cpu().numpy()
         all_clas_numpy = all_clas.detach().cpu().numpy()
-        
+
         ## an ad-hoc fix to remove these classes with less than two samples
         clas, cnts = np.unique(all_clas_numpy, return_counts=True)
         to_remove_clas = clas[cnts < 2]
