@@ -7,6 +7,7 @@ import time
 
 import cvxpy as cp
 import numpy as np
+import qpth
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -184,7 +185,7 @@ class DefenderOPT(nn.Module):
         ## cross-validation split used in the attacker's optimization
         ## it's initialized here for having consistent number of train/test data
         self.kf = StratifiedShuffleSplit(
-            n_splits=self.cv, test_size=0.3, random_state=self.seed
+            n_splits=self.cv, test_size=0.5, random_state=self.seed
         )
 
         if self.attacker_strength == 0.0:
@@ -820,26 +821,23 @@ class DefenderOPT(nn.Module):
         all_members = all_members[idx].to(self.device)
         all_clas = all_clas[idx].to(self.device)
 
-        all_scores_numpy = all_scores.detach().cpu().numpy()
-        all_clas_numpy = all_clas.detach().cpu().numpy()
-
-        ## an ad-hoc fix to remove these classes with less than two samples
-        clas, cnts = np.unique(all_clas_numpy, return_counts=True)
+        # Remove classes with less than two samples
+        clas, cnts = torch.unique(all_clas, return_counts=True)
         to_remove_clas = clas[cnts < 2]
-        mask = ~np.isin(all_clas_numpy, to_remove_clas)
-        all_scores_numpy = all_scores_numpy[mask]
-        all_clas_numpy = all_clas_numpy[mask]
+        mask = ~torch.isin(all_clas, to_remove_clas)
 
-        mask_tensor = torch.from_numpy(mask).to(self.device)
-        all_scores = all_scores[mask_tensor]
-        all_members = all_members[mask_tensor]
-        all_clas = all_clas[mask_tensor]
+        # Apply mask directly on GPU tensors
+        all_scores = all_scores[mask]
+        all_clas = all_clas[mask]
+        all_members = all_members[mask]
 
-        ## aggregate the attacker's likelihood across k-fold cross validation
         total_lik = torch.zeros(1, device=self.device)
         total_acc = torch.zeros(1, device=self.device)
+
         for fold, (train_indices, test_indices) in enumerate(
-            self.kf.split(all_scores_numpy, all_clas_numpy)
+            self.kf.split(
+                all_scores.detach().cpu().numpy(), all_clas.detach().cpu().numpy()
+            )
         ):
             train_indices = torch.from_numpy(train_indices).to(self.device)
             test_indices = torch.from_numpy(test_indices).to(self.device)
@@ -853,29 +851,11 @@ class DefenderOPT(nn.Module):
                 all_members[test_indices],
                 all_clas[test_indices],
             )
-            if not self.classwise:
-                ## create a separate attacker to differentiate between forget&test instances for each class,
-                ## as described in https://arxiv.org/abs/1610.05820
-                unique_clas = torch.unique(y_clas_tr).detach().to(torch.long)
-                for cl in unique_clas:
-                    cls_idx_tr = torch.where(y_clas_tr == cl)
-                    cls_idx_te = torch.where(y_clas_te == cl)
-                    # attacker's likelihood and accuracy
-                    att_lik, att_acc = self._attacker_likelihood(
-                        X_tr[cls_idx_tr],
-                        y_tr[cls_idx_tr],
-                        X_te[cls_idx_te],
-                        y_te[cls_idx_te],
-                        classifier=self.att_classifier,
-                    )
-                    total_lik = total_lik + att_lik
-                    total_acc = total_acc + att_acc
-            else:
-                att_lik, att_acc = self._attacker_likelihood(
-                    X_tr, y_tr, X_te, y_te, classifier=self.att_classifier
-                )
-                total_lik = total_lik + att_lik
-                total_acc = total_acc + att_acc
+            att_lik, att_acc = self._attacker_likelihood(
+                X_tr, y_tr, X_te, y_te, classifier=self.att_classifier
+            )
+            total_lik = total_lik + att_lik
+            total_acc = total_acc + att_acc
         return (
             total_lik / all_scores.size(0),
             total_acc / all_scores.size(0),
@@ -890,45 +870,131 @@ class DefenderOPT(nn.Module):
         else:
             raise ValueError("Unsupported classifier for the attacker's problem.")
 
+    # def _attacker_likelihood_SVM(self, X_tr, y_tr, X_te, y_te) -> torch.Tensor:
+    #     """
+    #     Formulate the membership inference attack (MIA)
+    #     as a differentiable layer of SVM
+    #     """
+    #     n_sample = X_tr.shape[0]
+    #     n_feature = X_tr.shape[1]
+
+    #     ## define the optimization problem of SVM in cvxpy
+    #     beta = cp.Variable((n_feature, 1))
+    #     b = cp.Variable()
+    #     data = cp.Parameter((n_sample, n_feature))
+    #     Y = 2 * y_tr.detach().cpu().numpy()[:, np.newaxis] - 1
+    #     ## margin loss
+    #     loss = cp.sum(cp.pos(1 - cp.multiply(Y, data @ beta - b)))
+    #     reg = self.attacker_reg * cp.norm(beta, 1)
+    #     prob = cp.Problem(cp.Minimize(loss / n_sample + reg))
+    #     attacker_layer = CvxpyLayer(prob, [data], [beta, b])
+    #     ## run (X_tr, y_tr) through the attacker layer
+    #     beta_tch, b_tch = attacker_layer(X_tr, solver_args={"solve_method": "SCS"})
+
+    #     def hinge_loss(output, target):
+    #         # For binary classification with labels +1 and -1
+    #         return torch.clamp(1 - output * (2 * target - 1), min=0).sum()
+
+    #     ## the attacker's utility, i.e., the negative of hinge loss
+    #     t = X_te @ beta_tch - b_tch
+    #     attacker_likelihood = -hinge_loss(t.squeeze(), y_te * 1.0)
+
+    #     ## the attacker's accuracy
+    #     with torch.no_grad():
+    #         ## the forget data is labeld as 1
+    #         preds = torch.where(
+    #             t >= 0,
+    #             torch.tensor(1, device=self.device),
+    #             torch.tensor(0, device=self.device),
+    #         )
+    #         attacker_accuracy = (preds.squeeze() == y_te).sum().item()
+    #     return (attacker_likelihood, attacker_accuracy)
+
     def _attacker_likelihood_SVM(self, X_tr, y_tr, X_te, y_te) -> torch.Tensor:
         """
         Formulate the membership inference attack (MIA)
-        as a differentiable layer of SVM
+        as a differentiable layer of SVM using qpth
         """
         n_sample = X_tr.shape[0]
         n_feature = X_tr.shape[1]
 
-        ## define the optimization problem of SVM in cvxpy
-        beta = cp.Variable((n_feature, 1))
-        b = cp.Variable()
-        data = cp.Parameter((n_sample, n_feature))
-        Y = 2 * y_tr.detach().cpu().numpy()[:, np.newaxis] - 1
-        ## margin loss
-        loss = cp.sum(cp.pos(1 - cp.multiply(Y, data @ beta - b)))
-        reg = self.attacker_reg * cp.norm(beta, 1)
-        prob = cp.Problem(cp.Minimize(loss / n_sample + reg))
-        attacker_layer = CvxpyLayer(prob, [data], [beta, b])
-        ## run (X_tr, y_tr) through the attacker layer
-        beta_tch, b_tch = attacker_layer(X_tr, solver_args={"solve_method": "SCS"})
+        # Convert labels to +1 or -1
+        y_tr_binary = y_tr * 2 - 1  # Assuming y_tr is 0 or 1
+        y_tr_binary = y_tr_binary.view(-1, 1)  # Shape: (n_sample, 1)
 
-        def hinge_loss(output, target):
-            # For binary classification with labels +1 and -1
-            return torch.clamp(1 - output * (2 * target - 1), min=0).sum()
+        # Regularization
+        C = self.attacker_reg  # Regularization strength
 
-        ## the attacker's utility, i.e., the negative of hinge loss
-        t = X_te @ beta_tch - b_tch
-        attacker_likelihood = -hinge_loss(t.squeeze(), y_te * 1.0)
+        # Define the decision variable z = [w; b; xi], total dimension n_z
+        n_z = n_feature + 1 + n_sample
 
-        ## the attacker's accuracy
+        # Construct Q matrix (n_z x n_z)
+        Q = torch.zeros(n_z, n_z, device=self.device)
+        Q[:n_feature, :n_feature] = torch.eye(n_feature, device=self.device)
+
+        # Construct p vector (n_z,)
+        p = torch.zeros(n_z, device=self.device)
+        p[n_feature + 1 :] = C  # Slack variables xi_i
+
+        # Construct G matrix and h vector for the constraints Gz <= h
+        # First, for the constraints y_i (w^T x_i + b) + xi_i >= 1
+        G1 = torch.zeros(n_sample, n_z, device=self.device)
+        G1[:, :n_feature] = -y_tr_binary * X_tr  # Shape: (n_sample, n_feature)
+        G1[:, n_feature] = -y_tr_binary.squeeze()  # Bias term
+        G1[:, n_feature + 1 :] = -torch.eye(
+            n_sample, device=self.device
+        )  # Slack variables xi_i
+        h1 = -torch.ones(n_sample, device=self.device)
+
+        # Second, for the constraints xi_i >= 0
+        G2 = torch.zeros(n_sample, n_z, device=self.device)
+        G2[:, n_feature + 1 :] = -torch.eye(n_sample, device=self.device)
+        h2 = torch.zeros(n_sample, device=self.device)
+
+        # Combine G and h
+        G = torch.cat([G1, G2], dim=0)  # Shape: (2 * n_sample, n_z)
+        h = torch.cat([h1, h2], dim=0)  # Shape: (2 * n_sample,)
+
+        # No equality constraints (A and b)
+        batch_size = 1
+
+        # Expand dimensions to include batch size
+        Q = Q.unsqueeze(0)  # Shape: (batch_size, n_z, n_z)
+        p = p.unsqueeze(0)  # Shape: (batch_size, n_z)
+        G = G.unsqueeze(0)  # Shape: (batch_size, m, n_z)
+        h = h.unsqueeze(0)  # Shape: (batch_size, m)
+
+        # Create empty tensors for A and b
+        # A and b are empty -> no equality constraints
+        A = torch.zeros(batch_size, 0, n_z, device=self.device)
+        b = torch.zeros(batch_size, 0, device=self.device)
+
+        # Solve the QP problem using qpth
+        # The solver expects Q to be positive definite, so we add a small value to the diagonal
+        Q = Q + 1e-6 * torch.eye(n_z, device=self.device).unsqueeze(0)
+
+        z = qpth.qp.QPFunction(verbose=False)(
+            Q.double(), p.double(), G.double(), h.double(), A.double(), b.double()
+        ).float()  # z: (batch_size, n_z)
+
+        z = z.squeeze(0)  # Remove batch dimension
+
+        # Extract w, b from z
+        w = z[:n_feature]  # Shape: (n_feature,)
+        b = z[n_feature]  # Scalar
+
+        # Compute the attacker's utility (negative hinge loss on test data)
+        t = X_te @ w + b  # Shape: (n_test_samples,)
+
+        hinge_loss = torch.clamp(1 - t * (2 * y_te - 1), min=0).sum()
+        attacker_likelihood = -hinge_loss
+
+        # Compute the attacker's accuracy
         with torch.no_grad():
-            ## the forget data is labeld as 1
-            preds = torch.where(
-                t >= 0,
-                torch.tensor(1, device=self.device),
-                torch.tensor(0, device=self.device),
-            )
-            attacker_accuracy = (preds.squeeze() == y_te).sum().item()
-        return (attacker_likelihood, attacker_accuracy)
+            preds = (t >= 0).float()
+            attacker_accuracy = (preds.squeeze() == y_te.float()).sum().item()
+
+        return attacker_likelihood, attacker_accuracy
 
 
 if __name__ == "__main__":
