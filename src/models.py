@@ -25,6 +25,7 @@ from torch.utils.data import ConcatDataset, DataLoader, Dataset
 
 from evaluate import evaluate_model
 from utils import BinaryClassificationDataset, wasserstein_distance_1d
+import json
 
 # from qpth.qp import QPFunction
 
@@ -237,9 +238,9 @@ class DefenderOPT(nn.Module):
             momentum=self.momentum,
             weight_decay=self.weight_decay,
         )
-        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        #     optimizer, T_max=self.num_epoch
-        # )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=self.num_epoch
+        )
 
         ## check the performance before any optimization
         if self.baseline_mode:
@@ -336,6 +337,7 @@ class DefenderOPT(nn.Module):
             )
 
         net.train()
+        resultss = []
         for epoch in range(self.num_epoch):
             t_start = time.time()
             try:
@@ -415,7 +417,7 @@ class DefenderOPT(nn.Module):
                     u_a = att_lik * self.attacker_strength * (B / N)
                     u_a.backward()
                 optimizer.step()
-            # scheduler.step()
+            scheduler.step()
             ## revert the lr back
             self._set_lr(optimizer, new_lr=self.defender_lr)
             ## time in minutes (excluding evaluation, etc.)
@@ -442,6 +444,24 @@ class DefenderOPT(nn.Module):
                     device=self.device,
                     seed=self.seed,
                 )
+                results = dict()
+                results["Epoch"] = epoch + 1
+                results["U_d"] = u_d.item() if self.with_attacker else "None"
+                results['test_acc'] = test_accuracy
+                results["forget_acc"] = forget_accuracy
+                results["retain_acc"] = retain_accuracy
+                results["att_acc"] = att_acc.item() if self.with_attacker else "None"
+                results["MIA_acc"] = MIA_accuracy.item()
+                results["MIA_auc"] = MIA_auc.item()
+                results["MIA_recall"] = MIA_recall.item()
+                results["MIA_F1"] = MIA_F1.item()
+                results["attacker_lr"] = self.attacker_lr
+                results["defender_lr"] = scheduler.get_last_lr()[0]
+                results["att_strength"] = self.attacker_strength
+                results["SG_base_method"] = self.SG_base_method
+                results["attack_time"] = t_att * 60.0
+                results["all_time"] = t_all * 60.0
+                resultss.append(results)
                 print(
                     f"Epoch [{epoch+1}/{self.num_epoch}], ",
                     f"U_d: {u_d.item():.4f}, ",
@@ -463,7 +483,7 @@ class DefenderOPT(nn.Module):
                     f"MIA recall: {MIA_recall.item():.4f}, ",
                     f"MIA_F1: {MIA_F1.item():.4f}, "
                     f"Attacker lr: {self.attacker_lr:.4f}, ",
-                    f"Defender lr: {self.defender_lr:.4f}, ",
+                    f"Defender lr: {scheduler.get_last_lr()[0]:.4f}, ",
                     f"attack str: {self.attacker_strength}",
                     f"SG_base_method: {self.SG_base_method}",
                 )
@@ -497,6 +517,9 @@ class DefenderOPT(nn.Module):
             print(
                 f"time/epoch: {t_all:.4f} min; attacker opt: {t_att:.4f} ({t_att/t_all:.2f})"
             )
+
+            with open(os.path.join(self.output_dir, f"{self.seed}_results.json"), "w") as f:
+                json.dump(resultss, f, indent=4)
 
     @staticmethod
     def _generate_scores(
@@ -867,48 +890,52 @@ class DefenderOPT(nn.Module):
     ) -> torch.Tensor:
         if classifier == "SVM":
             return self._attacker_likelihood_SVM(X_tr, y_tr, X_te, y_te)
+        elif classifier == "SVM_cvx":
+            return self._attacker_likelihood_SVM_cvx(X_tr, y_tr, X_te, y_te)
+        elif classifier == "LiRA":
+            return self._attacker_likelihood_LiRA(X_tr, y_tr, X_te, y_te)
         else:
             raise ValueError("Unsupported classifier for the attacker's problem.")
 
-    # def _attacker_likelihood_SVM(self, X_tr, y_tr, X_te, y_te) -> torch.Tensor:
-    #     """
-    #     Formulate the membership inference attack (MIA)
-    #     as a differentiable layer of SVM
-    #     """
-    #     n_sample = X_tr.shape[0]
-    #     n_feature = X_tr.shape[1]
+    def _attacker_likelihood_SVM_cvx(self, X_tr, y_tr, X_te, y_te) -> torch.Tensor:
+        """
+        Formulate the membership inference attack (MIA)
+        as a differentiable layer of SVM
+        """
+        n_sample = X_tr.shape[0]
+        n_feature = X_tr.shape[1]
 
-    #     ## define the optimization problem of SVM in cvxpy
-    #     beta = cp.Variable((n_feature, 1))
-    #     b = cp.Variable()
-    #     data = cp.Parameter((n_sample, n_feature))
-    #     Y = 2 * y_tr.detach().cpu().numpy()[:, np.newaxis] - 1
-    #     ## margin loss
-    #     loss = cp.sum(cp.pos(1 - cp.multiply(Y, data @ beta - b)))
-    #     reg = self.attacker_reg * cp.norm(beta, 1)
-    #     prob = cp.Problem(cp.Minimize(loss / n_sample + reg))
-    #     attacker_layer = CvxpyLayer(prob, [data], [beta, b])
-    #     ## run (X_tr, y_tr) through the attacker layer
-    #     beta_tch, b_tch = attacker_layer(X_tr, solver_args={"solve_method": "SCS"})
+        ## define the optimization problem of SVM in cvxpy
+        beta = cp.Variable((n_feature, 1))
+        b = cp.Variable()
+        data = cp.Parameter((n_sample, n_feature))
+        Y = 2 * y_tr.detach().cpu().numpy()[:, np.newaxis] - 1
+        ## margin loss
+        loss = cp.sum(cp.pos(1 - cp.multiply(Y, data @ beta - b)))
+        reg = self.attacker_reg * cp.norm(beta, 1)
+        prob = cp.Problem(cp.Minimize(loss / n_sample + reg))
+        attacker_layer = CvxpyLayer(prob, [data], [beta, b])
+        ## run (X_tr, y_tr) through the attacker layer
+        beta_tch, b_tch = attacker_layer(X_tr, solver_args={"solve_method": "SCS"})
 
-    #     def hinge_loss(output, target):
-    #         # For binary classification with labels +1 and -1
-    #         return torch.clamp(1 - output * (2 * target - 1), min=0).sum()
+        def hinge_loss(output, target):
+            # For binary classification with labels +1 and -1
+            return torch.clamp(1 - output * (2 * target - 1), min=0).sum()
 
-    #     ## the attacker's utility, i.e., the negative of hinge loss
-    #     t = X_te @ beta_tch - b_tch
-    #     attacker_likelihood = -hinge_loss(t.squeeze(), y_te * 1.0)
+        ## the attacker's utility, i.e., the negative of hinge loss
+        t = X_te @ beta_tch - b_tch
+        attacker_likelihood = -hinge_loss(t.squeeze(), y_te * 1.0)
 
-    #     ## the attacker's accuracy
-    #     with torch.no_grad():
-    #         ## the forget data is labeld as 1
-    #         preds = torch.where(
-    #             t >= 0,
-    #             torch.tensor(1, device=self.device),
-    #             torch.tensor(0, device=self.device),
-    #         )
-    #         attacker_accuracy = (preds.squeeze() == y_te).sum().item()
-    #     return (attacker_likelihood, attacker_accuracy)
+        ## the attacker's accuracy
+        with torch.no_grad():
+            ## the forget data is labeld as 1
+            preds = torch.where(
+                t >= 0,
+                torch.tensor(1, device=self.device),
+                torch.tensor(0, device=self.device),
+            )
+            attacker_accuracy = (preds.squeeze() == y_te).sum().item()
+        return (attacker_likelihood, attacker_accuracy)
 
     def _attacker_likelihood_SVM(self, X_tr, y_tr, X_te, y_te) -> torch.Tensor:
         """
@@ -995,6 +1022,74 @@ class DefenderOPT(nn.Module):
             attacker_accuracy = (preds.squeeze() == y_te.float()).sum().item()
 
         return attacker_likelihood, attacker_accuracy
+    
+    def _attacker_likelihood_LiRA(
+        self, X_tr, y_tr, X_te, y_te, eps=1e-8
+    ) -> torch.Tensor:
+        """
+        Formulate the MIA called LiRA from https://arxiv.org/abs/2112.03570
+
+
+        The optimization problem of LiRA is computing the likelihood ratio between the likelihood of 1) forget data and 2) testing data.
+
+        The attacker sets a threshold on the likelihood ratio. If the computed ratio exceeds this threshold, the attacker infers that
+        x is likely a member of the training data. Otherwise, it is likely a non-member.
+
+        In our specific case, the attacker would like to maximize the likelihood ratio, i.e., Lik(forget data) / Lik(test data).
+
+        """
+        n_sample = X_tr.shape[0]
+        n_feature = X_tr.shape[1]
+
+        # Define the logistic regression problem in cvxpy
+        beta = cp.Variable((n_feature, 1))
+        b = cp.Variable()
+        data = cp.Parameter((n_sample, n_feature))
+        Y = y_tr.detach().cpu().numpy()[:, np.newaxis]
+
+        # Logistic loss
+        z = data @ beta + b
+        loss = cp.sum(cp.logistic(-cp.multiply(2 * Y - 1, z)))
+        reg = self.attacker_reg * cp.norm(beta, 2)
+        prob = cp.Problem(cp.Minimize(loss / n_sample + reg))
+
+        # Convert the optimization into a differentiable layer
+        attacker_layer = CvxpyLayer(prob, [data], [beta, b])
+
+        # Run (X_tr, y_tr) through the attacker layer
+        beta_tch, b_tch = attacker_layer(X_tr, solver_args={"solve_method": "SCS"})
+
+        # Compute the predicted probabilities on X_te and y_te
+        t = X_te @ beta_tch + b_tch
+        probabilities = torch.sigmoid(t.squeeze())
+
+        idx_fg = y_te == 1  # forget data
+        idx_ts = y_te == 0  # test data
+
+        prob_fg = probabilities[idx_fg]
+        y_fg = y_te[idx_fg]
+        likhood_fg = y_fg * torch.log(prob_fg + eps) + (1 - y_fg) * torch.log(
+            1 - prob_fg + eps
+        )
+        log_likelihood_fg = likhood_fg.sum()
+
+        prob_ts = probabilities[idx_ts]
+        y_ts = y_te[idx_ts]
+        likhood_te = y_ts * torch.log(prob_ts + eps) + (1 - y_ts) * torch.log(
+            1 - prob_ts + eps
+        )
+        log_likelihood_ts = likhood_te.sum()
+
+        # Compute the likelihood ratio as the difference of log-likelihoods
+        attacker_likelihood = log_likelihood_fg - log_likelihood_ts
+
+        # Compute the attacker's accuracy
+        with torch.no_grad():
+            # the forget data is labeld as 1
+            preds = (probabilities >= 0.5).long()
+            attacker_accuracy = (preds == y_te).sum().item()
+
+        return (attacker_likelihood, attacker_accuracy)
 
 
 if __name__ == "__main__":
